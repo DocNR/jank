@@ -1,0 +1,25 @@
+name: CI
+
+# Lint + test on every PR into main. Non-blocking by default — promote it to a
+# required status check in branch-protection settings if you want it to gate
+# merges. `build` is intentionally omitted: Cloudflare Pages already runs
+# `tsc -b && vite build` on every PR, so duplicating it here buys nothing.
+#
+# All run: steps are static (npm ci / lint / test) — no ${{ github.event.* }}
+# interpolation, so there's no workflow-injection surface here.
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test

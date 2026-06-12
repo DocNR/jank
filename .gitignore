@@ -1,0 +1,59 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-electron
+dist-ssr
+dev-dist
+release
+*.local
+.env
+electron-builder.env
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.vercel
+
+.claude/
+
+# Local session handoff (not source — written by /wrap, regenerated each session)
+HANDOFF.md
+
+# Local brainstorm session artifacts (HTML scratch from superpowers:brainstorm — not source)
+.superpowers/
+
+# Local roadmap / design artifacts — kept on disk for the author's reference, not for publication
+BACKLOG.md
+!docs/BACKLOG.md
+docs/superpowers/
+
+# Local git worktrees (per-session isolated checkouts created by superpowers:using-git-worktrees)
+.worktrees/
+
+# internal-only docs + live-network smoke scripts — local files, never in the public repo
+docs/PROJECT-HISTORY.md
+docs/BACKLOG.md
+docs/account-isolation-ledger.md
+UPSTREAM-NOTES.md
+scripts/README.md
+scripts/smoke-*.mjs
+scripts/track-b-*.mjs
+scripts/clink-live-smoke.mjs
+.agents/
+.goose/

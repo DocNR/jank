@@ -1,0 +1,222 @@
+import { Drawer, DrawerContent, DrawerOverlay } from '@/components/ui/drawer'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
+import { LONG_PRESS_THRESHOLD } from '@/constants'
+import { useFilteredLikeCount } from '@/hooks/useFilteredLikeCount'
+import { useStuff } from '@/hooks/useStuff'
+import { useStuffStatsById } from '@/hooks/useStuffStatsById'
+import {
+  createDeletionRequestDraftEvent,
+  createExternalContentReactionDraftEvent,
+  createReactionDraftEvent
+} from '@/lib/draft-event'
+import { getDefaultRelayUrls } from '@/lib/relay'
+import { pubkeyToHsl } from '@/lib/pubkey'
+import { useSigningContext } from '@/hooks/useSigningContext'
+import { useScreenSize } from '@/providers/ScreenSizeProvider'
+import { useUserPreferences } from '@/providers/UserPreferencesProvider'
+import seenOnService from '@/services/caches/seen-on.service'
+import stuffStatsService from '@/services/stuff-stats.service'
+import { TEmoji } from '@/types'
+import { Loader, SmilePlus } from 'lucide-react'
+import { Event } from 'nostr-tools'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import Emoji from '../Emoji'
+import EmojiPicker from '../EmojiPicker'
+import SuggestedEmojis from '../SuggestedEmojis'
+import { SimpleUsername } from '../Username'
+import { formatCount } from './utils'
+import { formatError } from '@/lib/error'
+import { toast } from 'sonner'
+
+export default function LikeButton({ stuff }: { stuff: Event | string }) {
+  const { t } = useTranslation()
+  const { isSmallScreen } = useScreenSize()
+  // signerPubkey / publish resolve to the column's signingIdentity when inside
+  // a column scope, else the global active account.
+  const { signerPubkey, publish, checkLogin } = useSigningContext()
+  const { quickReaction, quickReactionEmoji } = useUserPreferences()
+  const { event, externalContent, stuffKey } = useStuff(stuff)
+  const [liking, setLiking] = useState(false)
+  const [isEmojiReactionsOpen, setIsEmojiReactionsOpen] = useState(false)
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
+  const likeCount = useFilteredLikeCount(stuffKey)
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const isLongPressRef = useRef(false)
+  const noteStats = useStuffStatsById(stuffKey)
+  const myLastEmoji = useMemo(() => {
+    const stats = noteStats || {}
+    const myLike = stats.likes?.find((like) => like.pubkey === signerPubkey)
+    return myLike?.emoji
+  }, [noteStats, signerPubkey])
+
+  useEffect(() => {
+    setTimeout(() => setIsPickerOpen(false), 100)
+  }, [isEmojiReactionsOpen])
+
+  const like = async (emoji: string | TEmoji) => {
+    checkLogin(async () => {
+      if (liking || !signerPubkey) return
+
+      setLiking(true)
+      const timer = setTimeout(() => setLiking(false), 10_000)
+
+      try {
+        if (!noteStats?.updatedAt) {
+          await stuffStatsService.fetchStuffStats(stuffKey, signerPubkey)
+        }
+
+        const reaction = event
+          ? createReactionDraftEvent(event, emoji)
+          : createExternalContentReactionDraftEvent(externalContent, emoji)
+        const seenOn = event ? seenOnService.getSeenEventRelayUrls(event.id) : getDefaultRelayUrls()
+        const evt = await publish(reaction, { additionalRelayUrls: seenOn })
+        stuffStatsService.updateStuffStatsByEvents([evt])
+        // 5s recovery window — Undo retracts the reaction with a kind-5
+        // deletion, signed by the same identity that just reacted. The toast
+        // names that identity (with its hue dot) so the recovery window
+        // doubles as a "did I act as the right account?" check.
+        toast(
+          <span className="flex items-center gap-1.5">
+            <span
+              className="size-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: pubkeyToHsl(signerPubkey) }}
+              aria-hidden
+            />
+            <span>{t('Liked as')}</span>
+            <SimpleUsername userId={signerPubkey} className="font-semibold" withoutSkeleton />
+          </span>,
+          {
+            duration: 5000,
+            action: {
+              label: t('Undo'),
+              onClick: () => {
+                publish(createDeletionRequestDraftEvent(evt)).catch((err) => {
+                  formatError(err).forEach((e) => {
+                    toast.error(`${t('Failed to undo')}: ${e}`, { duration: 10_000 })
+                  })
+                })
+              }
+            }
+          }
+        )
+      } catch (error) {
+        const errors = formatError(error)
+        errors.forEach((err) => {
+          toast.error(`${t('Failed to like')}: ${err}`, { duration: 10_000 })
+        })
+      } finally {
+        setLiking(false)
+        clearTimeout(timer)
+      }
+    })
+  }
+
+  const handleLongPressStart = () => {
+    if (!quickReaction) return
+    isLongPressRef.current = false
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressRef.current = true
+      setIsEmojiReactionsOpen(true)
+    }, LONG_PRESS_THRESHOLD)
+  }
+
+  const handleLongPressEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  const handleClick = (e: React.MouseEvent | React.TouchEvent) => {
+    if (quickReaction) {
+      // If it was a long press, don't trigger the click action
+      if (isLongPressRef.current) {
+        isLongPressRef.current = false
+        return
+      }
+      // Quick reaction mode: click to react with default emoji
+      // Prevent dropdown from opening
+      e.preventDefault()
+      e.stopPropagation()
+      like(quickReactionEmoji)
+    } else {
+      setIsEmojiReactionsOpen(true)
+    }
+  }
+
+  const trigger = (
+    <button
+      className="text-muted-foreground flex h-full cursor-pointer items-center gap-1 px-3 enabled:hover:text-red-400"
+      title={t('Like')}
+      disabled={liking}
+      onClick={handleClick}
+      onMouseDown={handleLongPressStart}
+      onMouseUp={handleLongPressEnd}
+      onMouseLeave={handleLongPressEnd}
+      onTouchStart={handleLongPressStart}
+      onTouchEnd={handleLongPressEnd}
+    >
+      {liking ? (
+        <Loader className="animate-spin" />
+      ) : myLastEmoji ? (
+        <>
+          <Emoji emoji={myLastEmoji} classNames={{ img: 'size-4' }} />
+          {!!likeCount && <div className="text-sm">{formatCount(likeCount)}</div>}
+        </>
+      ) : (
+        <>
+          <SmilePlus />
+          {!!likeCount && <div className="text-sm">{formatCount(likeCount)}</div>}
+        </>
+      )}
+    </button>
+  )
+
+  if (isSmallScreen) {
+    return (
+      <>
+        {trigger}
+        <Drawer open={isEmojiReactionsOpen} onOpenChange={setIsEmojiReactionsOpen}>
+          <DrawerOverlay onClick={() => setIsEmojiReactionsOpen(false)} />
+          <DrawerContent hideOverlay>
+            <EmojiPicker
+              onEmojiClick={(emoji) => {
+                setIsEmojiReactionsOpen(false)
+                if (!emoji) return
+
+                like(emoji)
+              }}
+            />
+          </DrawerContent>
+        </Drawer>
+      </>
+    )
+  }
+
+  return (
+    <Popover open={isEmojiReactionsOpen} onOpenChange={(open) => setIsEmojiReactionsOpen(open)}>
+      <PopoverAnchor asChild>{trigger}</PopoverAnchor>
+      <PopoverContent side="top" className="w-fit overflow-hidden border-0 p-0 shadow-lg">
+        {isPickerOpen ? (
+          <EmojiPicker
+            onEmojiClick={(emoji) => {
+              setIsEmojiReactionsOpen(false)
+              like(emoji)
+            }}
+          />
+        ) : (
+          <SuggestedEmojis
+            onEmojiClick={(emoji) => {
+              setIsEmojiReactionsOpen(false)
+              like(emoji)
+            }}
+            onMoreButtonClick={() => {
+              setIsPickerOpen(true)
+            }}
+          />
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
