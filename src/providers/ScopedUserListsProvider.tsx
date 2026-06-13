@@ -42,7 +42,7 @@ import {
   isReplaceableEvent
 } from '@/lib/event'
 import { getPinnedEventHexIdSetFromPinListEvent } from '@/lib/event-metadata'
-import { getPubkeysFromPTags } from '@/lib/tag'
+import { appendETag, getEventIdsFromETags, getPubkeysFromPTags, stripETag } from '@/lib/tag'
 import { ExtendedKind, MAX_PINNED_NOTES } from '@/constants'
 import { usePrivateTags, useUserListEvent } from '@/hooks/useReplaceableEvent'
 import followListService from '@/services/fetchers/follow-list.service'
@@ -233,6 +233,23 @@ function ScopedMuteListInner({ viewContext, signingIdentity, children }: InnerPr
   const mutePubkeySet = useMemo(
     () => new Set([...Array.from(privateMutePubkeySet), ...Array.from(publicMutePubkeySet)]),
     [publicMutePubkeySet, privateMutePubkeySet]
+  )
+
+  const publicMuteEventIdSet = useMemo(
+    () => new Set(muteListEvent ? getEventIdsFromETags(muteListEvent.tags) : []),
+    [muteListEvent]
+  )
+  const privateMuteEventIdSet = useMemo(
+    () => new Set(getEventIdsFromETags(privateTags)),
+    [privateTags]
+  )
+  const muteEventIdSet = useMemo(
+    () => new Set([...Array.from(privateMuteEventIdSet), ...Array.from(publicMuteEventIdSet)]),
+    [publicMuteEventIdSet, privateMuteEventIdSet]
+  )
+  const isThreadMuted = useCallback(
+    (rootId: string) => muteEventIdSet.has(rootId),
+    [muteEventIdSet]
   )
 
   // The signer for the SIGNER's own list — used for nip44 encrypt/decrypt. Read
@@ -490,9 +507,64 @@ function ScopedMuteListInner({ viewContext, signingIdentity, children }: InnerPr
     [signingIdentity, changing, decryptSignerPrivateTags, applyMutation]
   )
 
+  const muteThread = useCallback(
+    async (rootId: string) => {
+      const signer = client.getSignerFor(signingIdentity ?? '')
+      if (changing || !signer || !signingIdentity) return
+      setChanging(true)
+      try {
+        const current = await muteListService.fetchMuteListEvent(signingIdentity)
+        if (!current) {
+          const result = confirm(t('MuteListNotFoundConfirmation'))
+          if (!result) return
+        }
+        const currentPrivate = current ? await decryptSignerPrivateTags(current) : []
+        const newPrivate = appendETag(currentPrivate, rootId)
+        if (newPrivate === currentPrivate) return
+        const content = await signer.nip44Encrypt(signingIdentity, JSON.stringify(newPrivate))
+        await applyMutation(current?.tags ?? [], content, newPrivate, current ?? undefined)
+      } catch (error) {
+        formatError(error).forEach((err) => {
+          toast.error('Failed to mute thread: ' + err, { duration: 10_000 })
+        })
+      } finally {
+        setChanging(false)
+      }
+    },
+    [signingIdentity, changing, decryptSignerPrivateTags, applyMutation, t]
+  )
+
+  const unmuteThread = useCallback(
+    async (rootId: string) => {
+      const signer = client.getSignerFor(signingIdentity ?? '')
+      if (changing || !signer || !signingIdentity) return
+      setChanging(true)
+      try {
+        const current = await muteListService.fetchMuteListEvent(signingIdentity)
+        if (!current) return
+        const currentPrivate = await decryptSignerPrivateTags(current)
+        const newPrivate = stripETag(currentPrivate, rootId)
+        let content = current.content
+        if (newPrivate.length !== currentPrivate.length) {
+          content = await signer.nip44Encrypt(signingIdentity, JSON.stringify(newPrivate))
+        }
+        const newTags = stripETag(current.tags, rootId)
+        await applyMutation(newTags, content, newPrivate, current)
+      } catch (error) {
+        formatError(error).forEach((err) => {
+          toast.error('Failed to unmute thread: ' + err, { duration: 10_000 })
+        })
+      } finally {
+        setChanging(false)
+      }
+    },
+    [signingIdentity, changing, decryptSignerPrivateTags, applyMutation]
+  )
+
   const value = useMemo(
     () => ({
       mutePubkeySet,
+      muteEventIdSet,
       changing,
       getMutePubkeys,
       getMuteType,
@@ -500,10 +572,14 @@ function ScopedMuteListInner({ viewContext, signingIdentity, children }: InnerPr
       mutePubkeyPrivately,
       unmutePubkey,
       switchToPublicMute,
-      switchToPrivateMute
+      switchToPrivateMute,
+      muteThread,
+      unmuteThread,
+      isThreadMuted
     }),
     [
       mutePubkeySet,
+      muteEventIdSet,
       changing,
       getMutePubkeys,
       getMuteType,
@@ -511,7 +587,10 @@ function ScopedMuteListInner({ viewContext, signingIdentity, children }: InnerPr
       mutePubkeyPrivately,
       unmutePubkey,
       switchToPublicMute,
-      switchToPrivateMute
+      switchToPrivateMute,
+      muteThread,
+      unmuteThread,
+      isThreadMuted
     ]
   )
 
