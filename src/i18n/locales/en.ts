@@ -1078,6 +1078,8 @@ export default {
     'Use updated offer': 'Use updated offer',
     Paid: 'Paid',
     'Republished to {{count}} relays: {{relays}}': 'Republished to {{count}} relays: {{relays}}',
-    'Configure relay sets': 'Configure relay sets'
+    'Configure relay sets': 'Configure relay sets',
+    'Mute thread': 'Mute thread',
+    'Unmute thread': 'Unmute thread'
   }
 }
