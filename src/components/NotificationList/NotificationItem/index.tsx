@@ -1,5 +1,5 @@
 import { ExtendedKind } from '@/constants'
-import { isMentioningMutedUsers } from '@/lib/event'
+import { isInMutedThread, isMentioningMutedUsers } from '@/lib/event'
 import { tagNameEquals } from '@/lib/tag'
 import { useContentPolicy } from '@/providers/ContentPolicyProvider'
 import { useMuteList } from '@/providers/UserListsProvider'
@@ -23,13 +23,18 @@ export function NotificationItem({
   // The notification surface's pubkey — the column's viewContext in column
   // mode, the active account in page mode. Not the sidebar-active singleton.
   const { pubkey } = useNotification()
-  const { mutePubkeySet } = useMuteList()
+  const { mutePubkeySet, muteEventIdSet } = useMuteList()
   const { hideContentMentioningMutedUsers } = useContentPolicy()
   const [canShow, setCanShow] = useState(false)
 
   useEffect(() => {
     const checkCanShow = async () => {
       if (mutePubkeySet.has(notification.pubkey)) {
+        setCanShow(false)
+        return
+      }
+
+      if (isInMutedThread(notification, muteEventIdSet)) {
         setCanShow(false)
         return
       }
@@ -51,7 +56,7 @@ export function NotificationItem({
     }
 
     checkCanShow()
-  }, [notification, pubkey, mutePubkeySet, hideContentMentioningMutedUsers])
+  }, [notification, pubkey, mutePubkeySet, muteEventIdSet, hideContentMentioningMutedUsers])
 
   if (!canShow) return null
 
