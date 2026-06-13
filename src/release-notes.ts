@@ -19,7 +19,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     date: '2026-06-13',
     highlights: [
       "Your Home columns now remember whether you're viewing Notes or Notes and replies. Switch to Notes and replies and it stays that way after a reload, instead of resetting to Notes every time.",
-      'The choice is saved per column and syncs to your other devices, so each Home column keeps its own setting.'
+      'Each Home column keeps its own setting. Save your deck to carry the choice to your other devices.'
     ]
   },
   {
