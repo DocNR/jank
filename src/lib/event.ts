@@ -229,6 +229,22 @@ export function getRootEventHexId(event?: Event) {
   return tag?.[1]
 }
 
+// The id of the conversation `event` belongs to: its NIP-10 thread root, or its
+// own id when it is a top-level note. Used both to STORE a thread mute (mute the
+// clicked note's root) and to FILTER (a note is in the thread iff its computed
+// root matches). Same function at both ends keeps the two consistent.
+export function getThreadRootId(event: Event): string {
+  return getRootEventHexId(event) ?? event.id
+}
+
+// True when `event` belongs to a muted thread: either it IS a muted id, or its
+// computed thread root is muted (which every descendant shares via the NIP-10
+// root marker). O(1); no reply-tree traversal.
+export function isInMutedThread(event: Event, muteEventIdSet: Set<string>): boolean {
+  if (muteEventIdSet.size === 0) return false
+  return muteEventIdSet.has(event.id) || muteEventIdSet.has(getThreadRootId(event))
+}
+
 export function getRootTag(event?: Event): { type: 'e' | 'a' | 'i'; tag: string[] } | undefined {
   if (!event) return undefined
 
