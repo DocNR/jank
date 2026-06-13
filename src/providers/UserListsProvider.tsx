@@ -32,6 +32,7 @@ export const useFollowList = () => {
 
 type TMuteListContext = {
   mutePubkeySet: Set<string>
+  muteEventIdSet: Set<string>
   changing: boolean
   getMutePubkeys: () => string[]
   getMuteType: (pubkey: string) => 'public' | 'private' | null
@@ -40,6 +41,9 @@ type TMuteListContext = {
   unmutePubkey: (pubkey: string) => Promise<void>
   switchToPublicMute: (pubkey: string) => Promise<void>
   switchToPrivateMute: (pubkey: string) => Promise<void>
+  muteThread: (rootId: string) => Promise<void>
+  unmuteThread: (rootId: string) => Promise<void>
+  isThreadMuted: (rootId: string) => boolean
 }
 
 export const MuteListContext = createContext<TMuteListContext | undefined>(undefined)
