@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { FUTURE_EVENT_TOLERANCE_SECONDS, NOTIFICATION_LIST_STYLE } from '@/constants'
 import { useColumnVisible } from '@/hooks/useColumnVisible'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
-import { isMentioningMutedUsers } from '@/lib/event'
+import { isInMutedThread, isMentioningMutedUsers } from '@/lib/event'
 import { buildNoteRows, TNoteRow } from '@/lib/note-rows'
 import { mergeTimelines } from '@/lib/timeline'
 import { useAccountScopeOptional } from '@/providers/AccountScope'
@@ -140,7 +140,7 @@ const NoteList = forwardRef<
     const authPubkey = scope?.signingIdentity ?? undefined
     const { startLogin } = useNostr()
     const { isSpammer, isUserTrusted } = useUserTrust()
-    const { mutePubkeySet } = useMuteList()
+    const { mutePubkeySet, muteEventIdSet } = useMuteList()
     const { hideContentMentioningMutedUsers, mutedWords } = useContentPolicy()
     const { isEventDeleted } = useDeletedEvent()
     const [storedEvents, setStoredEvents] = useState<Event[]>([])
@@ -195,6 +195,7 @@ const NoteList = forwardRef<
         if (pinnedEventHexIdSet.has(evt.id)) return true
         if (isEventDeleted(evt)) return true
         if (filterMutedNotes && mutePubkeySet.has(evt.pubkey)) return true
+        if (filterMutedNotes && isInMutedThread(evt, muteEventIdSet)) return true
         if (
           filterMutedNotes &&
           hideContentMentioningMutedUsers &&
@@ -219,6 +220,7 @@ const NoteList = forwardRef<
       },
       [
         mutePubkeySet,
+        muteEventIdSet,
         isEventDeleted,
         filterFn,
         mutedWords,
