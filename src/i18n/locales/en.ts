@@ -1080,6 +1080,7 @@ export default {
     'Republished to {{count}} relays: {{relays}}': 'Republished to {{count}} relays: {{relays}}',
     'Configure relay sets': 'Configure relay sets',
     'Mute thread': 'Mute thread',
-    'Unmute thread': 'Unmute thread'
+    'Unmute thread': 'Unmute thread',
+    'Muted threads': 'Muted threads'
   }
 }

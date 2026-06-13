@@ -1,9 +1,10 @@
+import ContentPreview from '@/components/ContentPreview'
 import MuteButton from '@/components/MuteButton'
 import Nip05 from '@/components/Nip05'
 import { Button } from '@/components/ui/button'
 import UserAvatar from '@/components/UserAvatar'
 import Username from '@/components/Username'
-import { useFetchProfile } from '@/hooks'
+import { useFetchEvent, useFetchProfile } from '@/hooks'
 import SecondaryPageLayout from '@/layouts/SecondaryPageLayout'
 import { useMuteList } from '@/providers/UserListsProvider'
 import { useNostr } from '@/providers/NostrProvider'
@@ -15,8 +16,9 @@ import NotFoundPage from '../NotFoundPage'
 const MuteListPage = forwardRef(({ index }: { index?: number }, ref) => {
   const { t } = useTranslation()
   const { profile, pubkey } = useNostr()
-  const { getMutePubkeys } = useMuteList()
+  const { getMutePubkeys, muteEventIdSet } = useMuteList()
   const mutePubkeys = useMemo(() => getMutePubkeys(), [pubkey])
+  const muteEventIds = useMemo(() => Array.from(muteEventIdSet), [pubkey])
   const [visibleMutePubkeys, setVisibleMutePubkeys] = useState<string[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -69,11 +71,50 @@ const MuteListPage = forwardRef(({ index }: { index?: number }, ref) => {
         ))}
         {mutePubkeys.length > visibleMutePubkeys.length && <div ref={bottomRef} />}
       </div>
+        {muteEventIds.length > 0 && (
+          <div className="mt-6 px-4">
+            <div className="text-muted-foreground mb-2 text-sm font-semibold">
+              {t('Muted threads')}
+            </div>
+            <div className="space-y-2">
+              {muteEventIds.map((id) => (
+                <ThreadItem key={id} eventId={id} />
+              ))}
+            </div>
+          </div>
+        )}
     </SecondaryPageLayout>
   )
 })
 MuteListPage.displayName = 'MuteListPage'
 export default MuteListPage
+
+function ThreadItem({ eventId }: { eventId: string }) {
+  const { t } = useTranslation()
+  const { changing, unmuteThread } = useMuteList()
+  const { event } = useFetchEvent(eventId)
+  const [removing, setRemoving] = useState(false)
+
+  return (
+    <div className="flex items-start gap-2">
+      <div className="w-full overflow-hidden">
+        <ContentPreview event={event} className="line-clamp-3" />
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="shrink-0"
+        disabled={changing || removing}
+        onClick={() => {
+          setRemoving(true)
+          unmuteThread(eventId).finally(() => setRemoving(false))
+        }}
+      >
+        {removing ? <Loader className="animate-spin" /> : t('Unmute')}
+      </Button>
+    </div>
+  )
+}
 
 function UserItem({ pubkey }: { pubkey: string }) {
   const { changing, getMuteType, switchToPrivateMute, switchToPublicMute } = useMuteList()
