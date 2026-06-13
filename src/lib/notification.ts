@@ -1,5 +1,5 @@
 import { kinds, NostrEvent } from 'nostr-tools'
-import { isMentioningMutedUsers } from './event'
+import { isInMutedThread, isMentioningMutedUsers } from './event'
 import { tagNameEquals } from './tag'
 
 export function notificationFilter(
@@ -7,10 +7,12 @@ export function notificationFilter(
   {
     pubkey,
     mutePubkeySet,
+    muteEventIdSet,
     hideContentMentioningMutedUsers
   }: {
     pubkey?: string | null
     mutePubkeySet: Set<string>
+    muteEventIdSet: Set<string>
     hideContentMentioningMutedUsers?: boolean
   }
 ): boolean {
@@ -18,6 +20,13 @@ export function notificationFilter(
     mutePubkeySet.has(event.pubkey) ||
     (hideContentMentioningMutedUsers && isMentioningMutedUsers(event, mutePubkeySet))
   ) {
+    return false
+  }
+
+  // Muted threads must also drop OUT of the unread counts (column badge +
+  // favicon/title), not just the rendered list — otherwise a muted hellthread
+  // that keeps tagging you still lights up the badge.
+  if (isInMutedThread(event, muteEventIdSet)) {
     return false
   }
 

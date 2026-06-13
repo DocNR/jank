@@ -16,7 +16,7 @@ import { useCallback } from 'react'
  * match the column's account.
  */
 export function useNotificationFilter(pubkey: string | null | undefined) {
-  const { mutePubkeySet } = useMuteList()
+  const { mutePubkeySet, muteEventIdSet } = useMuteList()
   const { hideContentMentioningMutedUsers } = useContentPolicy()
 
   return useCallback(
@@ -24,8 +24,9 @@ export function useNotificationFilter(pubkey: string | null | undefined) {
       notificationFilter(event, {
         pubkey,
         mutePubkeySet,
+        muteEventIdSet,
         hideContentMentioningMutedUsers
       }),
-    [pubkey, mutePubkeySet, hideContentMentioningMutedUsers]
+    [pubkey, mutePubkeySet, muteEventIdSet, hideContentMentioningMutedUsers]
   )
 }
