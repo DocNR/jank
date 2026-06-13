@@ -388,7 +388,7 @@ function ScopedSecondaryPage({
 export function dispatchBody(column: TColumn): React.ReactNode {
   switch (column.type) {
     case 'home':
-      return <HomeColumnBody />
+      return <HomeColumnBody column={column} />
     case 'notifications':
       return <NotificationsColumnBody column={column} />
     case 'articles':

@@ -7,6 +7,7 @@ import { TFeedSubRequest, TFeedTabConfig } from '@/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import KindFilter from '../KindFilter'
 import { RefreshButton } from '../RefreshButton'
+import { resolveInitialTabId } from './initial-tab'
 
 export default function NormalFeed({
   feedId,
@@ -14,7 +15,9 @@ export default function NormalFeed({
   areAlgoRelays = false,
   showRelayCloseReason = false,
   onRefresh,
-  isPubkeyFeed = false
+  isPubkeyFeed = false,
+  initialTabId,
+  onTabChange
 }: {
   feedId: string
   subRequests: TFeedSubRequest[]
@@ -22,17 +25,26 @@ export default function NormalFeed({
   showRelayCloseReason?: boolean
   onRefresh?: () => void
   isPubkeyFeed?: boolean
+  /** Tab to open on (a DEFAULT_FEED_TABS id). Read once at mount. Absent → the
+   *  first visible tab ('Notes'). The Home column passes its persisted
+   *  column.config.feedTab here. */
+  initialTabId?: string
+  /** Called with the new tab id when the user switches tabs, so the caller can
+   *  persist the choice (e.g. into column.config.feedTab). */
+  onTabChange?: (tabId: string) => void
 }) {
   const { getShowKinds } = useKindFilter()
   const feedShowKinds = useMemo(() => getShowKinds(feedId), [getShowKinds, feedId])
   const [temporaryShowKinds, setTemporaryShowKinds] = useState(feedShowKinds)
 
-  const visibleTabs = useMemo(
-    () => DEFAULT_FEED_TABS.filter((tab) => !tab.hidden),
-    []
-  )
+  const visibleTabs = useMemo(() => DEFAULT_FEED_TABS.filter((tab) => !tab.hidden), [])
 
-  const [selectedTabId, setSelectedTabId] = useState<string | undefined>()
+  // Seed from the caller's persisted tab once at mount; an absent/stale value
+  // falls back to the first visible tab. After mount this component owns the
+  // selection (re-seeding on every render would fight the user's clicks).
+  const [selectedTabId, setSelectedTabId] = useState<string | undefined>(() =>
+    resolveInitialTabId(initialTabId, visibleTabs)
+  )
   const selectedTab: TFeedTabConfig = selectedTabId
     ? (visibleTabs.find((tab) => tab.id === selectedTabId) ?? visibleTabs[0])
     : visibleTabs[0]
@@ -57,10 +69,14 @@ export default function NormalFeed({
     setTemporaryShowKinds(feedShowKinds)
   }, [feedShowKinds])
 
-  const handleListModeChange = useCallback((mode: string) => {
-    setSelectedTabId(mode)
-    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
+  const handleListModeChange = useCallback(
+    (mode: string) => {
+      setSelectedTabId(mode)
+      onTabChange?.(mode)
+      topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    },
+    [onTabChange]
+  )
 
   const handleShowKindsChange = useCallback((newShowKinds: number[]) => {
     setTemporaryShowKinds(newShowKinds)
