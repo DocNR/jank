@@ -1,7 +1,7 @@
 import { UserAvatarSkeleton } from '@/components/UserAvatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NSFW_DISPLAY_POLICY } from '@/constants'
-import { isMentioningMutedUsers, isNsfwEvent } from '@/lib/event'
+import { isInMutedThread, isMentioningMutedUsers, isNsfwEvent } from '@/lib/event'
 import { cn } from '@/lib/utils'
 import { useContentPolicy } from '@/providers/ContentPolicyProvider'
 import { useMuteList } from '@/providers/UserListsProvider'
@@ -23,10 +23,13 @@ function NoteCardImpl({
   pinned?: boolean
   reposters?: string[]
 }) {
-  const { mutePubkeySet } = useMuteList()
+  const { mutePubkeySet, muteEventIdSet } = useMuteList()
   const { hideContentMentioningMutedUsers, nsfwDisplayPolicy } = useContentPolicy()
   const shouldHide = useMemo(() => {
     if (filterMutedNotes && mutePubkeySet.has(event.pubkey)) {
+      return true
+    }
+    if (filterMutedNotes && isInMutedThread(event, muteEventIdSet)) {
       return true
     }
     if (hideContentMentioningMutedUsers && isMentioningMutedUsers(event, mutePubkeySet)) {
@@ -36,7 +39,7 @@ function NoteCardImpl({
       return true
     }
     return false
-  }, [event, filterMutedNotes, mutePubkeySet, nsfwDisplayPolicy])
+  }, [event, filterMutedNotes, mutePubkeySet, muteEventIdSet, nsfwDisplayPolicy])
   if (shouldHide) return null
 
   if (event.kind === kinds.Repost || event.kind === kinds.GenericRepost) {
