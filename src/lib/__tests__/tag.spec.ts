@@ -1,11 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateSecretKey, getPublicKey } from 'nostr-tools'
 import { getPubkeysFromPTags } from '@/lib/tag'
-import {
-  getEventIdsFromETags,
-  appendETag,
-  stripETag
-} from '@/lib/tag'
+import { getEventIdsFromETags, appendETag, stripETag } from '@/lib/tag'
 
 const PK_A = getPublicKey(generateSecretKey())
 const PK_B = getPublicKey(generateSecretKey())
@@ -76,17 +72,30 @@ describe('getEventIdsFromETags', () => {
   })
 
   it('ignores non-e tags and empty ids', () => {
-    expect(getEventIdsFromETags([['p', ID_A], ['e', '']])).toEqual([])
+    expect(
+      getEventIdsFromETags([
+        ['p', ID_A],
+        ['e', '']
+      ])
+    ).toEqual([])
   })
 
   it('dedupes', () => {
-    expect(getEventIdsFromETags([['e', ID_A], ['e', ID_A]])).toEqual([ID_A])
+    expect(
+      getEventIdsFromETags([
+        ['e', ID_A],
+        ['e', ID_A]
+      ])
+    ).toEqual([ID_A])
   })
 })
 
 describe('appendETag', () => {
   it('appends an e tag', () => {
-    expect(appendETag([['p', ID_A]], ID_B)).toEqual([['p', ID_A], ['e', ID_B]])
+    expect(appendETag([['p', ID_A]], ID_B)).toEqual([
+      ['p', ID_A],
+      ['e', ID_B]
+    ])
   })
 
   it('is a no-op (same reference) when already present', () => {
@@ -97,7 +106,16 @@ describe('appendETag', () => {
 
 describe('stripETag', () => {
   it('removes the matching e tag, keeps others', () => {
-    expect(stripETag([['e', ID_A], ['e', ID_B], ['p', ID_A]], ID_A)).toEqual([
+    expect(
+      stripETag(
+        [
+          ['e', ID_A],
+          ['e', ID_B],
+          ['p', ID_A]
+        ],
+        ID_A
+      )
+    ).toEqual([
       ['e', ID_B],
       ['p', ID_A]
     ])

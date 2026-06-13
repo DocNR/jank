@@ -71,18 +71,18 @@ const MuteListPage = forwardRef(({ index }: { index?: number }, ref) => {
         ))}
         {mutePubkeys.length > visibleMutePubkeys.length && <div ref={bottomRef} />}
       </div>
-        {muteEventIds.length > 0 && (
-          <div className="mt-6 px-4">
-            <div className="text-muted-foreground mb-2 text-sm font-semibold">
-              {t('Muted threads')}
-            </div>
-            <div className="space-y-2">
-              {muteEventIds.map((id) => (
-                <ThreadItem key={id} eventId={id} />
-              ))}
-            </div>
+      {muteEventIds.length > 0 && (
+        <div className="mt-6 px-4">
+          <div className="text-muted-foreground mb-2 text-sm font-semibold">
+            {t('Muted threads')}
           </div>
-        )}
+          <div className="space-y-2">
+            {muteEventIds.map((id) => (
+              <ThreadItem key={id} eventId={id} />
+            ))}
+          </div>
+        </div>
+      )}
     </SecondaryPageLayout>
   )
 })
