@@ -15,6 +15,13 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.12.2',
+    date: '2026-06-13',
+    highlights: [
+      'You can now mute an entire thread. Choose "Mute thread" from any note\'s menu and the whole conversation, including every reply, disappears from your feeds and notifications. Muted threads stay muted across your devices, and you can unmute them from Settings.'
+    ]
+  },
+  {
     version: '26.12.1',
     date: '2026-06-13',
     highlights: [
