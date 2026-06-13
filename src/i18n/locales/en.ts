@@ -1081,6 +1081,7 @@ export default {
     'Configure relay sets': 'Configure relay sets',
     'Mute thread': 'Mute thread',
     'Unmute thread': 'Unmute thread',
-    'Muted threads': 'Muted threads'
+    'Muted threads': 'Muted threads',
+    'This note is from a thread you muted': 'This note is from a thread you muted'
   }
 }

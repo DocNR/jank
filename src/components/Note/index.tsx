@@ -1,7 +1,7 @@
 import { useSecondaryPage } from '@/DeckManager'
 import { ExtendedKind, NSFW_DISPLAY_POLICY, SUPPORTED_KINDS } from '@/constants'
 import { cn } from '@/lib/utils'
-import { getParentStuff, isNsfwEvent } from '@/lib/event'
+import { getParentStuff, isInMutedThread, isNsfwEvent } from '@/lib/event'
 import { toExternalContent, toNote } from '@/lib/link'
 import { generateBech32IdFromATag, generateBech32IdFromETag, tagNameEquals } from '@/lib/tag'
 import { useContentPolicy } from '@/providers/ContentPolicyProvider'
@@ -77,7 +77,7 @@ export default function Note({
   }, [event])
   const { nsfwDisplayPolicy } = useContentPolicy()
   const [showNsfw, setShowNsfw] = useState(false)
-  const { mutePubkeySet } = useMuteList()
+  const { mutePubkeySet, muteEventIdSet } = useMuteList()
   const [showMuted, setShowMuted] = useState(false)
   const isNsfw = useMemo(
     () => (nsfwDisplayPolicy === NSFW_DISPLAY_POLICY.SHOW ? false : isNsfwEvent(event)),
@@ -104,6 +104,8 @@ export default function Note({
     content = <UnknownNote className="mt-1" event={event} />
   } else if (mutePubkeySet.has(event.pubkey) && !showMuted) {
     content = <MutedNote show={() => setShowMuted(true)} />
+  } else if (isInMutedThread(event, muteEventIdSet) && !showMuted) {
+    content = <MutedNote reason="thread" show={() => setShowMuted(true)} />
   } else if (isNsfw && !showNsfw) {
     content = <NsfwNote show={() => setShowNsfw(true)} />
   } else if (event.kind === kinds.Highlights) {
