@@ -15,7 +15,7 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: '26.12.0',
+    version: '26.12.1',
     date: '2026-06-13',
     highlights: [
       "Your Home columns now remember whether you're viewing Notes or Notes and replies. Switch to Notes and replies and it stays that way after a reload, instead of resetting to Notes every time.",
