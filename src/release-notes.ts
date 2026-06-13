@@ -15,6 +15,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.11.0',
+    date: '2026-06-13',
+    highlights: [
+      'The note menu\'s "Republish to..." option no longer opens empty. It now always lists Optimal relays, so you can republish any note even before you have set up favorite relays.',
+      'Republishing to Optimal relays now shows exactly which relays it reached, right in the confirmation popup.',
+      'A new "Configure relay sets" shortcut in the Republish menu lets you create and manage named relay sets to republish to.'
+    ]
+  },
+  {
     version: '26.10.0',
     date: '2026-06-12',
     highlights: [
