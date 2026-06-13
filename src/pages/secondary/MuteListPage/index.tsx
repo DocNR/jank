@@ -18,7 +18,9 @@ const MuteListPage = forwardRef(({ index }: { index?: number }, ref) => {
   const { profile, pubkey } = useNostr()
   const { getMutePubkeys, muteEventIdSet } = useMuteList()
   const mutePubkeys = useMemo(() => getMutePubkeys(), [pubkey])
-  const muteEventIds = useMemo(() => Array.from(muteEventIdSet), [pubkey])
+  // Reactive (unlike mutePubkeys above): unmuting a thread has no MuteButton
+  // toggle to mask the row, so the row should vanish as soon as the set updates.
+  const muteEventIds = useMemo(() => Array.from(muteEventIdSet), [muteEventIdSet])
   const [visibleMutePubkeys, setVisibleMutePubkeys] = useState<string[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
 
