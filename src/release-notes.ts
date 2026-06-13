@@ -15,6 +15,14 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.12.0',
+    date: '2026-06-13',
+    highlights: [
+      "Your Home columns now remember whether you're viewing Notes or Notes and replies. Switch to Notes and replies and it stays that way after a reload, instead of resetting to Notes every time.",
+      'The choice is saved per column and syncs to your other devices, so each Home column keeps its own setting.'
+    ]
+  },
+  {
     version: '26.11.0',
     date: '2026-06-13',
     highlights: [
@@ -36,7 +44,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: '26.9.0',
     date: '2026-06-11',
     highlights: [
-      'Spectr now understands CLINK Lightning offers. A noffer1... payment code in a note renders as a payable card instead of a wall of text: see the price (or enter an amount), hit Pay, and Spectr fetches a fresh invoice from the offer\'s service over Nostr and hands it to your wallet. No web servers involved, end to end.',
+      "Spectr now understands CLINK Lightning offers. A noffer1... payment code in a note renders as a payable card instead of a wall of text: see the price (or enter an amount), hit Pay, and Spectr fetches a fresh invoice from the offer's service over Nostr and hands it to your wallet. No web servers involved, end to end.",
       'When the service confirms your payment landed, the card flips to Paid, even if you paid by scanning the QR with a phone wallet.',
       'Offer requests are sent with a throwaway key, so paying an offer never links your Nostr identity to the payment.'
     ],
@@ -153,8 +161,6 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: '26.5.4',
     date: '2026-05-29',
-    highlights: [
-      'jank now tells you when a new version is available and shows what changed.'
-    ]
+    highlights: ['jank now tells you when a new version is available and shows what changed.']
   }
 ]
