@@ -1,6 +1,6 @@
 import { useSecondaryPage } from '@/DeckManager'
 import { formatError } from '@/lib/error'
-import { getNoteBech32Id, isProtectedEvent } from '@/lib/event'
+import { getNoteBech32Id, getThreadRootId, isProtectedEvent } from '@/lib/event'
 import { toRelaySettings, toShareNoteUrl } from '@/lib/link'
 import { pubkeyToNpub } from '@/lib/pubkey'
 import { simplifyUrl } from '@/lib/url'
@@ -73,7 +73,15 @@ export function useMenuActions({
   const relayUrls = useMemo(() => {
     return Array.from(new Set(currentBrowsingRelayUrls.concat(favoriteRelays)))
   }, [currentBrowsingRelayUrls, favoriteRelays])
-  const { mutePubkeyPublicly, mutePubkeyPrivately, unmutePubkey, mutePubkeySet } = useMuteList()
+  const {
+    mutePubkeyPublicly,
+    mutePubkeyPrivately,
+    unmutePubkey,
+    mutePubkeySet,
+    muteThread,
+    unmuteThread,
+    isThreadMuted
+  } = useMuteList()
   const { pinnedEventHexIdSet, pin, unpin } = usePinList()
   const { isFavorited, toggleFavorite } = useFavorites()
   const isMuted = useMemo(() => mutePubkeySet.has(event.pubkey), [mutePubkeySet, event])
@@ -321,6 +329,25 @@ export function useMenuActions({
       }
     }
 
+    if (pubkey) {
+      const rootId = getThreadRootId(event)
+      const threadMuted = isThreadMuted(rootId)
+      actions.push({
+        icon: threadMuted ? Bell : BellOff,
+        label: threadMuted ? t('Unmute thread') : t('Mute thread'),
+        onClick: () => {
+          closeDrawer()
+          if (threadMuted) {
+            unmuteThread(rootId)
+          } else {
+            muteThread(rootId)
+          }
+        },
+        className: 'text-destructive focus:text-destructive',
+        separator: true
+      })
+    }
+
     if (pubkey && event.pubkey === pubkey) {
       actions.push({
         icon: Trash2,
@@ -351,7 +378,10 @@ export function useMenuActions({
     setIsRawEventDialogOpen,
     mutePubkeyPrivately,
     mutePubkeyPublicly,
-    unmutePubkey
+    unmutePubkey,
+    isThreadMuted,
+    muteThread,
+    unmuteThread
   ])
 
   return menuActions
