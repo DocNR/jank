@@ -81,6 +81,12 @@ export type TColumnConfig = {
    *  2-hop WoT (your follows + their follows). Per-column binary filter
    *  replacing the prior trustScoreThreshold int. Default false. */
   wotOnly?: boolean
+  /** 'home': which <NormalFeed> tab this column opens on, persisted per-column
+   *  so the choice survives reloads and rides the deck's NIP-78 sync. Matches a
+   *  DEFAULT_FEED_TABS id. Absent → opens on 'posts' (Notes, replies hidden),
+   *  today's default. An unknown/stale value falls back to 'posts'
+   *  (see resolveInitialTabId). Only the Home column persists this today. */
+  feedTab?: 'posts' | 'postsAndReplies'
 }
 
 export type TColumn = {

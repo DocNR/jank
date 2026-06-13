@@ -15,9 +15,17 @@ import { useTranslation } from 'react-i18next'
 type Props = {
   /** Override pubkey for column-scoped use. If absent, falls back to the global active account. */
   pubkey?: string
+  /** Persisted feed tab to open on (forwarded to <NormalFeed>). */
+  initialTabId?: string
+  /** Called when the user switches feed tab, so the column can persist it. */
+  onTabChange?: (tabId: string) => void
 }
 
-export default function FollowingFeed({ pubkey: pubkeyProp }: Props = {}) {
+export default function FollowingFeed({
+  pubkey: pubkeyProp,
+  initialTabId,
+  onTabChange
+}: Props = {}) {
   const { t } = useTranslation()
   const { pubkey: activePubkey } = useNostr()
   const pubkey = pubkeyProp ?? activePubkey
@@ -93,6 +101,8 @@ export default function FollowingFeed({ pubkey: pubkeyProp }: Props = {}) {
         setRefreshCount((count) => count + 1)
       }}
       isPubkeyFeed
+      initialTabId={initialTabId}
+      onTabChange={onTabChange}
     />
   )
 }

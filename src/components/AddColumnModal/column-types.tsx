@@ -99,7 +99,7 @@ const HOME_DESCRIPTOR: ColumnTypeDescriptor = {
   }),
   isReadyToPreview: (draft) => !!draft.viewContext,
   supportsViewAs: true,
-  PreviewBody: () => <HomeColumnBody />,
+  PreviewBody: ({ column }) => <HomeColumnBody column={column} />,
   previewHint: 'Pick an account to preview'
 }
 

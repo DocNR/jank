@@ -80,6 +80,16 @@ describe('deck-sync-codec', () => {
     expect(decodeWorkspace(bad)).toEqual({ ok: false, reason: 'shape' })
   })
 
+  it('round-trips a persisted feedTab on a home column config', () => {
+    const s = workspace({
+      decks: [deck({ savedColumns: [col({ config: { feedTab: 'postsAndReplies' } })] })]
+    })
+    const decoded = decodeWorkspace(encodeWorkspace(s))
+    expect(decoded.ok).toBe(true)
+    if (!decoded.ok) return
+    expect(decoded.workspace.decks[0].columns[0].config?.feedTab).toBe('postsAndReplies')
+  })
+
   it('decode isolates columns and savedColumns config objects', () => {
     const s = workspace({
       decks: [deck({ savedColumns: [col({ id: 'a', type: 'hashtag', config: { hashtags: ['x'] } })] })]
