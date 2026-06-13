@@ -1,6 +1,7 @@
+import { useSecondaryPage } from '@/DeckManager'
 import { formatError } from '@/lib/error'
 import { getNoteBech32Id, isProtectedEvent } from '@/lib/event'
-import { toShareNoteUrl } from '@/lib/link'
+import { toRelaySettings, toShareNoteUrl } from '@/lib/link'
 import { pubkeyToNpub } from '@/lib/pubkey'
 import { simplifyUrl } from '@/lib/url'
 import { useCurrentRelays } from '@/providers/CurrentRelaysProvider'
@@ -18,6 +19,7 @@ import {
   Pin,
   PinOff,
   SatelliteDish,
+  Settings,
   Star,
   StarOff,
   Trash2,
@@ -28,6 +30,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import RelayIcon from '../RelayIcon'
+import { computeBroadcastTargets } from './broadcast-targets'
 
 export interface SubMenuAction {
   label: React.ReactNode
@@ -63,6 +66,7 @@ export function useMenuActions({
   isSmallScreen
 }: UseMenuActionsProps) {
   const { t } = useTranslation()
+  const { push } = useSecondaryPage()
   const { pubkey, attemptDelete } = useNostr()
   const { relayUrls: currentBrowsingRelayUrls } = useCurrentRelays()
   const { relaySets, favoriteRelays } = useFavoriteRelays()
@@ -74,95 +78,112 @@ export function useMenuActions({
   const { isFavorited, toggleFavorite } = useFavorites()
   const isMuted = useMemo(() => mutePubkeySet.has(event.pubkey), [mutePubkeySet, event])
 
-  const broadcastSubMenu: SubMenuAction[] = useMemo(() => {
-    const items = []
-    if (pubkey && event.pubkey === pubkey) {
-      items.push({
-        label: <div className="text-start"> {t('Optimal relays')}</div>,
-        onClick: async () => {
-          closeDrawer()
-          const promise = async () => {
-            const relays = await client.determineTargetRelays(event)
-            if (relays?.length) {
-              await client.publishEvent(relays, event)
-            }
-          }
-          toast.promise(promise, {
-            loading: t('Republishing...'),
-            success: () => {
-              return t(
-                "Successfully republish to optimal relays (your write relays and mentioned users' read relays)"
-              )
-            },
-            error: (err) => {
-              return t('Failed to republish to optimal relays: {{error}}', {
-                error: err.message
-              })
-            }
-          })
-        }
-      })
-    }
+  const broadcastTargets = useMemo(
+    () => computeBroadcastTargets({ signedIn: !!pubkey, relaySets, relayUrls }),
+    [pubkey, relaySets, relayUrls]
+  )
 
-    if (relaySets.length) {
-      items.push(
-        ...relaySets
-          .filter((set) => set.relayUrls.length)
-          .map((set, index) => ({
-            label: <div className="truncate text-start">{set.name}</div>,
+  const broadcastSubMenu: SubMenuAction[] = useMemo(() => {
+    const items = broadcastTargets.map((target): SubMenuAction => {
+      switch (target.kind) {
+        case 'optimal':
+          return {
+            label: <div className="text-start"> {t('Optimal relays')}</div>,
+            separator: target.separator,
             onClick: async () => {
               closeDrawer()
-              const promise = client.publishEvent(set.relayUrls, event)
+              const promise = async () => {
+                const relays = await client.determineTargetRelays(event)
+                if (relays?.length) {
+                  await client.publishEvent(relays, event)
+                }
+                return relays ?? []
+              }
+              toast.promise(promise, {
+                loading: t('Republishing...'),
+                success: (relays: string[]) => {
+                  return t('Republished to {{count}} relays: {{relays}}', {
+                    count: relays.length,
+                    relays: relays.map(simplifyUrl).join(', ')
+                  })
+                },
+                error: (err) => {
+                  return t('Failed to republish to optimal relays: {{error}}', {
+                    error: err.message
+                  })
+                }
+              })
+            }
+          }
+        case 'relaySet':
+          return {
+            label: <div className="truncate text-start">{target.name}</div>,
+            separator: target.separator,
+            onClick: async () => {
+              closeDrawer()
+              const promise = client.publishEvent(target.relayUrls, event)
               toast.promise(promise, {
                 loading: t('Republishing...'),
                 success: () => {
-                  return t('Successfully republish to relay set: {{name}}', { name: set.name })
+                  return t('Successfully republish to relay set: {{name}}', { name: target.name })
                 },
                 error: (err) => {
                   return t('Failed to republish to relay set: {{name}}. Error: {{error}}', {
-                    name: set.name,
+                    name: target.name,
                     error: formatError(err).join('; ')
                   })
                 }
               })
-            },
-            separator: index === 0
-          }))
-      )
-    }
+            }
+          }
+        case 'relay':
+          return {
+            label: (
+              <div className="flex w-full items-center gap-2">
+                <RelayIcon url={target.url} />
+                <div className="flex-1 truncate text-start">{simplifyUrl(target.url)}</div>
+              </div>
+            ),
+            separator: target.separator,
+            onClick: async () => {
+              closeDrawer()
+              const promise = client.publishEvent([target.url], event)
+              toast.promise(promise, {
+                loading: t('Republishing...'),
+                success: () => {
+                  return t('Successfully republish to relay: {{url}}', {
+                    url: simplifyUrl(target.url)
+                  })
+                },
+                error: (err) => {
+                  return t('Failed to republish to relay: {{url}}. Error: {{error}}', {
+                    url: simplifyUrl(target.url),
+                    error: formatError(err).join('; ')
+                  })
+                }
+              })
+            }
+          }
+      }
+    })
 
-    if (relayUrls.length) {
-      items.push(
-        ...relayUrls.map((relay, index) => ({
-          label: (
-            <div className="flex w-full items-center gap-2">
-              <RelayIcon url={relay} />
-              <div className="flex-1 truncate text-start">{simplifyUrl(relay)}</div>
-            </div>
-          ),
-          onClick: async () => {
-            closeDrawer()
-            const promise = client.publishEvent([relay], event)
-            toast.promise(promise, {
-              loading: t('Republishing...'),
-              success: () => {
-                return t('Successfully republish to relay: {{url}}', { url: simplifyUrl(relay) })
-              },
-              error: (err) => {
-                return t('Failed to republish to relay: {{url}}. Error: {{error}}', {
-                  url: simplifyUrl(relay),
-                  error: formatError(err).join('; ')
-                })
-              }
-            })
-          },
-          separator: index === 0
-        }))
-      )
-    }
+    // Always offer a way to create / manage relay sets to republish to.
+    items.push({
+      label: (
+        <div className="flex w-full items-center gap-2 text-start">
+          <Settings className="size-4 shrink-0" />
+          <div className="flex-1 truncate">{t('Configure relay sets')}</div>
+        </div>
+      ),
+      separator: true,
+      onClick: () => {
+        closeDrawer()
+        push(toRelaySettings('favorite-relays'))
+      }
+    })
 
     return items
-  }, [pubkey, relayUrls, relaySets])
+  }, [broadcastTargets, event, t, closeDrawer, push])
 
   const menuActions: MenuAction[] = useMemo(() => {
     const actions: MenuAction[] = [
@@ -210,7 +231,11 @@ export function useMenuActions({
     ]
 
     const isProtected = isProtectedEvent(event)
-    if (!isProtected || event.pubkey === pubkey) {
+    // Only offer "Republish to ..." when there is a real publish target.
+    // (The submenu always also carries a "Configure relay sets" entry, so we
+    // gate on the targets — not the submenu length — to avoid showing a
+    // Republish item whose only action is "Configure".)
+    if ((!isProtected || event.pubkey === pubkey) && broadcastTargets.length > 0) {
       actions.push({
         icon: SatelliteDish,
         label: t('Republish to ...'),
@@ -318,6 +343,7 @@ export function useMenuActions({
     isFavorited,
     toggleFavorite,
     isSmallScreen,
+    broadcastTargets,
     broadcastSubMenu,
     pinnedEventHexIdSet,
     closeDrawer,
