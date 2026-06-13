@@ -1076,6 +1076,8 @@ export default {
     'The offer was updated by the service': 'The offer was updated by the service',
     'The service identity changed': 'The service identity changed',
     'Use updated offer': 'Use updated offer',
-    Paid: 'Paid'
+    Paid: 'Paid',
+    'Republished to {{count}} relays: {{relays}}': 'Republished to {{count}} relays: {{relays}}',
+    'Configure relay sets': 'Configure relay sets'
   }
 }
