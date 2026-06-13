@@ -98,6 +98,27 @@ export function getPubkeysFromPTags(tags: string[][]) {
   )
 }
 
+export function getEventIdsFromETags(tags: string[][]) {
+  return Array.from(
+    new Set(
+      tags
+        .filter(tagNameEquals('e'))
+        .map(([, id]) => id)
+        .filter((id): id is string => !!id)
+        .reverse()
+    )
+  )
+}
+
+export function appendETag(tags: string[][], id: string): string[][] {
+  if (tags.some((tag) => tag[0] === 'e' && tag[1] === id)) return tags
+  return [...tags, ['e', id]]
+}
+
+export function stripETag(tags: string[][], id: string): string[][] {
+  return tags.filter((tag) => tag[0] !== 'e' || tag[1] !== id)
+}
+
 export function getEmojiInfosFromEmojiTags(tags: string[][] = []) {
   return tags
     .map((tag) => {
