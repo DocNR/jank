@@ -20,7 +20,7 @@ Orientation for AI agents and contributors working in the jank codebase.
   - [Signer registry and AccountScope](#signer-registry-and-accountscope)
   - [Routing model](#routing-model)
 - [Column types](#column-types)
-  - [The 11 column types](#the-11-column-types)
+  - [The 12 column types](#the-12-column-types)
   - [Adding a new column type](#adding-a-new-column-type)
 - [Code conventions](#code-conventions)
   - [Components](#components)
@@ -201,7 +201,7 @@ Phase 2 (shipped 2026-05-17) retired the upstream Jumble primary-route + seconda
 
 ## Column types
 
-### The 11 column types
+### The 12 column types
 
 | #   | Type                  | TColumnType value      | Underlying primitive                                       | Filter shape                                                       |
 | --- | --------------------- | ---------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -216,10 +216,13 @@ Phase 2 (shipped 2026-05-17) retired the upstream Jumble primary-route + seconda
 | 9   | Relatr People         | `relatr-discovery`     | `search_profiles` MCP call via ContextVM transport         | ranked author list (cached pubkeys + per-author Follow)            |
 | 10  | Articles              | `articles`             | `<NoteList wotOnly cacheToIndexedDb>`                      | `{kinds:[30023]}` open feed; WoT toggle narrows client-side        |
 | 11  | Favorites             | `favorites`            | `<NoteList isPubkeyFeed>` with Notes / Notes-and-replies tabs | `{kinds:[1,6], authors: <favoritePubkeySet>}` (kind 10010 list) |
+| 12  | Messages              | `messages`             | `<MessagesColumnBody>` master⇄detail + per-account `DmInboxService` | gift-wrapped `{kinds:[1059], '#p':[pubkey]}`, unwrapped to NIP-17 kind-14 rumors |
 
 `dvm-discover` is reachable as a column type via deep link / DVM picker's "Browse all DVMs" link but has no AddColumnModal tile. `detail` is the type used for transient detail columns spawned from in-column clicks.
 
 **Articles** (kind 30023, addressable per NIP-23) and **Favorites** (kind 10010 PINNED_USERS — Jumble extension, not in NIP-51) shipped 2026-05-27 as the home-feed cleanup sprint (PRs #85 strip + #86 Articles + #87 Favorites). The user-facing "Favorites" maps to the internal `PINNED_USERS` wire identifier; the kind number is the protocol contract, the rename was consumer-layer only.
+
+**Messages** (`messages`, NIP-17 private DMs) shipped 2026-06-02 as the 12th column type: a per-account 1-on-1 encrypted DM inbox. `MessagesColumnBody` is a master⇄detail surface (`ConversationList` ⇄ `MessageThread` + `ChatInput`) backed by a refcounted per-account `DmInboxService` (IndexedDB v25). Messages travel as gift-wrapped kind-1059 events carrying NIP-44-encrypted kind-14 rumors, signed/decrypted through `ISigner` (works for Clave/NIP-46, Amber, nsec.app, local nsec). **Gotcha:** gift-wrap `created_at` is randomized up to 2 days in the *past* (NIP-17 metadata privacy), so the live subscription's `since` is backed off 2 days or freshly-sent wraps silently drop. DMs render as plain text. A kind-10050 DM-relay list is required; the column shows `DmRelaySetup` until one exists.
 
 **Bookmarks** (PR #90) is one reverse-chronological `<NoteList>` over a single `{ids}` feed, not two tag-grouped sections. e-tag (note) bookmarks contribute their ids directly; a-tag (addressable article) bookmarks are resolved to concrete event ids in `BookmarksColumnBody.resolveATagEventIds` — local-first via the v24 `coordinateIndex` on the events store (`indexedDb.getEventsByCoordinates`), relay fallback for misses (one query, written back). Folding everything into one ids sub-request gives the fast primary-key IndexedDB replay and one subscription (no per-coordinate REQ fan-out). Bookmarked events (e-tag ids + a-tag coordinates) are exempt from the events-store 5-day TTL in `cleanUpOldEvents`, so saved items paint from cache on reload regardless of age. Companion fix PR #91 corrected `getEventById`'s record-shape read so the per-event `useFetchEvent` cache hits app-wide.
 
