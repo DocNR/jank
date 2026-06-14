@@ -15,6 +15,13 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.13.0',
+    date: '2026-06-13',
+    highlights: [
+      'A new "Muted" column puts everything you have muted in one place. See and manage muted users, muted threads, and muted words together, with tabs to filter by type. Add it from the column picker, or open it from your profile menu.'
+    ]
+  },
+  {
     version: '26.12.2',
     date: '2026-06-13',
     highlights: [
