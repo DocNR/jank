@@ -41,9 +41,10 @@ export default function MutedUserItem({ pubkey }: { pubkey: string }) {
         try {
           await (target === 'public' ? switchToPublicMute(pubkey) : switchToPrivateMute(pubkey))
         } catch {
-          // The provider already surfaced a toast; stop and let the label
-          // reconcile to the real state below.
-          break
+          // The provider already surfaced a toast. Don't break: if a newer click
+          // queued a different target while this one was failing, honor it on the
+          // next iteration. Otherwise the loop exits and the label reconciles to
+          // the real state below.
         }
       }
     } finally {
