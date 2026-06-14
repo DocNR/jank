@@ -113,7 +113,7 @@ function WordsSection() {
       <div className="text-muted-foreground mb-2 text-xs">
         {t('Muted words apply to all your accounts.')}
       </div>
-      <MutedWordsSection />
+      <MutedWordsSection variant="rows" />
     </div>
   )
 }
