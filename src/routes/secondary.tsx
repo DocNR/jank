@@ -6,7 +6,6 @@ import ExternalContentPage from '@/pages/secondary/ExternalContentPage'
 import FollowingListPage from '@/pages/secondary/FollowingListPage'
 import FollowPackPage from '@/pages/secondary/FollowPackPage'
 import GeneralSettingsPage from '@/pages/secondary/GeneralSettingsPage'
-import MuteListPage from '@/pages/secondary/MuteListPage'
 import NoteListPage from '@/pages/secondary/NoteListPage'
 import NotePage from '@/pages/secondary/NotePage'
 import OthersRelaySettingsPage from '@/pages/secondary/OthersRelaySettingsPage'
@@ -53,7 +52,6 @@ const SECONDARY_ROUTE_CONFIGS: {
   { path: '/settings/system', element: <SystemSettingsPage /> },
   { path: '/settings/agents', element: <AgentsSettingsPage /> },
   { path: '/profile-editor', element: <ProfileEditorPage /> },
-  { path: '/mutes', element: <MuteListPage /> },
   { path: '/rizful', element: <RizfulPage /> },
   { path: '/bookmarks', element: <BookmarkPage /> },
   { path: '/follow-packs/:id', element: <FollowPackPage /> }

@@ -225,6 +225,7 @@ export function routeOpensOwnColumn(route: string): boolean {
     parseSearchRoute(route) !== null ||
     route === '/notifications' ||
     route === '/bookmarks' ||
+    route === '/mutes' ||
     route === '/me' ||
     route === '/profile'
   )

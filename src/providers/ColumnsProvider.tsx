@@ -224,7 +224,8 @@ const STANDING_TYPES: ReadonlySet<TColumnType> = new Set([
   'profile',
   'notifications',
   'bookmarks',
-  'search'
+  'search',
+  'mute-list'
 ])
 
 /**
@@ -657,6 +658,12 @@ export function ColumnsProvider({ children }: { children: ReactNode }) {
       } else if (route === '/bookmarks') {
         if (!actingPubkey) return
         resolvedType = 'bookmarks'
+        resolvedConfig = undefined
+        resolvedViewContext = actingPubkey
+        resolvedSigningIdentity = actingPubkey
+      } else if (route === '/mutes') {
+        if (!actingPubkey) return
+        resolvedType = 'mute-list'
         resolvedConfig = undefined
         resolvedViewContext = actingPubkey
         resolvedSigningIdentity = actingPubkey
