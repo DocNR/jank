@@ -30,7 +30,8 @@ const ALL_COLUMN_TYPES = Object.keys({
   'relatr-discovery': true,
   articles: true,
   favorites: true,
-  messages: true
+  messages: true,
+  'mute-list': true
 } satisfies Record<TColumnType, true>) as TColumnType[]
 
 function makeColumn(type: TColumnType): TColumn {

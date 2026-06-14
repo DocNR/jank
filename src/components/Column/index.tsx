@@ -31,6 +31,7 @@ import { useTranslation } from 'react-i18next'
 import { SecondaryPageContext, useSecondaryPage } from '@/DeckManager'
 import HomeColumnBody from './HomeColumnBody'
 import MessagesColumnBody from './MessagesColumnBody'
+import MuteListColumnBody from './MuteListColumnBody'
 import NotificationsColumnBody from './NotificationsColumnBody'
 import DetailColumnBody from './DetailColumnBody'
 import RelayColumnBody from './RelayColumnBody'
@@ -411,6 +412,8 @@ export function dispatchBody(column: TColumn): React.ReactNode {
       return <RelatrDiscoveryColumnBody column={column} />
     case 'messages':
       return <MessagesColumnBody />
+    case 'mute-list':
+      return <MuteListColumnBody />
     case 'detail':
       return <DetailColumnBody column={column} />
     case 'relay':

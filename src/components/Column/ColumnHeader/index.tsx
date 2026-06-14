@@ -283,6 +283,8 @@ export function columnLabel(column: TColumn, t: (k: string) => string): string {
     }
     case 'messages':
       return t('Messages')
+    case 'mute-list':
+      return t('Muted')
     case 'detail':
       return t('Detail')
     case 'relay': {

@@ -1,5 +1,6 @@
 // src/components/AddColumnModal/column-types.ts
 import MessagesColumnBody from '@/components/Column/MessagesColumnBody'
+import MuteListColumnBody from '@/components/Column/MuteListColumnBody'
 import ArticlesColumnBody from '@/components/Column/ArticlesColumnBody'
 import RelayColumnBody from '@/components/Column/RelayColumnBody'
 import HomeColumnBody from '@/components/Column/HomeColumnBody'
@@ -15,6 +16,7 @@ import { TAccountPointer } from '@/types'
 import { TColumn, TColumnType } from '@/types/column'
 import {
   Bell,
+  BellOff,
   Bookmark,
   BookOpen,
   Compass,
@@ -342,6 +344,25 @@ const MESSAGES_DESCRIPTOR: ColumnTypeDescriptor = {
   previewHint: 'Pick a signing account to preview'
 }
 
+const MUTE_LIST_DESCRIPTOR: ColumnTypeDescriptor = {
+  type: 'mute-list',
+  icon: BellOff,
+  label: 'Muted',
+  // 'm' is taken by Messages; use 'u' (mUted) for the tile shortcut.
+  shortcut: 'u',
+  defaults: (account) => ({
+    viewContext: account?.pubkey,
+    signingIdentity: account?.pubkey ?? null,
+    type: 'mute-list'
+  }),
+  isReadyToPreview: (draft) => !!draft.viewContext,
+  // Mute management is for your own account: you can't read others' private
+  // mutes, and viewing a foreign public mute list is out of scope.
+  supportsViewAs: false,
+  PreviewBody: () => <MuteListColumnBody />,
+  previewHint: 'Pick an account to preview'
+}
+
 export const COLUMN_TYPES: ColumnTypeDescriptor[] = [
   HOME_DESCRIPTOR,
   NOTIFICATIONS_DESCRIPTOR,
@@ -354,5 +375,6 @@ export const COLUMN_TYPES: ColumnTypeDescriptor[] = [
   ARTICLES_DESCRIPTOR,
   DVM_FEED_DESCRIPTOR,
   RELATR_DISCOVERY_DESCRIPTOR,
-  MESSAGES_DESCRIPTOR
+  MESSAGES_DESCRIPTOR,
+  MUTE_LIST_DESCRIPTOR
 ]
