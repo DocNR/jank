@@ -134,6 +134,16 @@ describe('migrateColumns', () => {
     })
   })
 
+  describe('mute-list column type', () => {
+    it('keeps columns with type "mute-list"', () => {
+      const result = migrateColumns([
+        { id: 'c1', viewContext: 'pk1', signingIdentity: 'pk1', type: 'mute-list' }
+      ])
+      expect(result).toHaveLength(1)
+      expect(result[0].type).toBe('mute-list')
+    })
+  })
+
   describe('regression — pre-existing migration behavior', () => {
     it('preserves relayUrl config', () => {
       const result = migrateColumns([

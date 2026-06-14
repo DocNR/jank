@@ -14,6 +14,7 @@ export type TColumnType =
   | 'articles'
   | 'favorites'
   | 'messages'
+  | 'mute-list'
 
 /**
  * Type-specific column config. Fields are populated based on column type:

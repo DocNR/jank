@@ -1082,6 +1082,12 @@ export default {
     'Mute thread': 'Mute thread',
     'Unmute thread': 'Unmute thread',
     'Muted threads': 'Muted threads',
-    'This note is from a thread you muted': 'This note is from a thread you muted'
+    'This note is from a thread you muted': 'This note is from a thread you muted',
+    'Muted users': 'Muted users',
+    Threads: 'Threads',
+    Words: 'Words',
+    'No muted users': 'No muted users',
+    'No muted threads': 'No muted threads',
+    'Muted words apply to all your accounts.': 'Muted words apply to all your accounts.'
   }
 }

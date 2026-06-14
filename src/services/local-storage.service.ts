@@ -77,7 +77,8 @@ export function migrateColumns(raw: unknown): TColumn[] {
       type !== 'relatr-discovery' &&
       type !== 'articles' &&
       type !== 'favorites' &&
-      type !== 'messages'
+      type !== 'messages' &&
+      type !== 'mute-list'
     ) {
       // 'dms' falls through here too — DM feature removed, drop the column.
       continue
