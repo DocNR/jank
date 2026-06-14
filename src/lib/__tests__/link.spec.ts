@@ -250,6 +250,10 @@ describe('routeOpensOwnColumn — Detail-column replace-mode delegation policy',
       expect(routeOpensOwnColumn('/bookmarks')).toBe(true)
     })
 
+    it('returns true for /mutes', () => {
+      expect(routeOpensOwnColumn('/mutes')).toBe(true)
+    })
+
     it('returns true for the /me self-profile shorthand', () => {
       expect(routeOpensOwnColumn('/me')).toBe(true)
     })
