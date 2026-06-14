@@ -15,6 +15,13 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.13.1',
+    date: '2026-06-14',
+    highlights: [
+      'Opening a muted thread now lets you read the whole conversation. Click "Reveal muted thread" and the note and all of its replies appear together, instead of showing only the one note. The thread stays muted in your feeds and notifications.'
+    ]
+  },
+  {
     version: '26.13.0',
     date: '2026-06-13',
     highlights: [
