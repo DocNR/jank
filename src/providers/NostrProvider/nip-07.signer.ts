@@ -36,7 +36,7 @@ export class Nip07Signer implements ISigner {
     if (!this.signer) {
       throw new Error('Should call init() first')
     }
-    return await withSignerApproval(this.signer.signEvent(draftEvent))
+    return await withSignerApproval(this.signer.signEvent(draftEvent), draftEvent.kind)
   }
 
   async nip04Encrypt(pubkey: string, plainText: string) {
