@@ -15,6 +15,14 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.14.0',
+    date: '2026-06-14',
+    highlights: [
+      "Zap counts are now verified. Each zap receipt is checked against the sender's lightning provider before it counts, so forged zaps can no longer inflate the totals on notes or in your notifications.",
+      'Remote signing is clearer. When a post or action is waiting on your remote signer to approve it (a bunker, Amber, and similar), a quiet "waiting for approval" hint now appears, and the request times out instead of hanging if your signer never responds.'
+    ]
+  },
+  {
     version: '26.13.1',
     date: '2026-06-14',
     highlights: [
