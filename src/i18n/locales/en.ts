@@ -1091,6 +1091,12 @@ export default {
     'Muted words apply to all your accounts.': 'Muted words apply to all your accounts.',
     'Reveal muted thread': 'Reveal muted thread',
     'Waiting for signer approval...': 'Waiting for signer approval...',
-    'Signer did not respond in time': 'Signer did not respond in time'
+    'Signer did not respond in time': 'Signer did not respond in time',
+    Private: 'Private',
+    Public: 'Public',
+    'Only you can see this mute. Click to make it public.':
+      'Only you can see this mute. Click to make it public.',
+    'Anyone can see this mute. Click to make it private.':
+      'Anyone can see this mute. Click to make it private.'
   }
 }
