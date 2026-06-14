@@ -463,7 +463,13 @@ function ScopedMuteListInner({ viewContext, signingIdentity, children }: InnerPr
         if (!current) return
         const currentPrivate = await decryptSignerPrivateTags(current)
         const newPrivate = currentPrivate.filter((t) => t[0] !== 'p' || t[1] !== pubkey)
-        if (newPrivate.length === currentPrivate.length) return
+        if (newPrivate.length === currentPrivate.length) {
+          // The pubkey wasn't in the decrypted private list — usually the private
+          // portion failed to decrypt (e.g. a bunker round-trip). Don't fail
+          // silently; surface it so the toggle doesn't just snap back.
+          toast.error('Could not change mute visibility. Please try again.', { duration: 10_000 })
+          return
+        }
         const content = await signer.nip44Encrypt(signingIdentity, JSON.stringify(newPrivate))
         const newTags = current.tags
           .filter((t) => t[0] !== 'p' || t[1] !== pubkey)
@@ -489,7 +495,10 @@ function ScopedMuteListInner({ viewContext, signingIdentity, children }: InnerPr
         const current = await muteListService.fetchMuteListEvent(signingIdentity)
         if (!current) return
         const newTags = current.tags.filter((t) => t[0] !== 'p' || t[1] !== pubkey)
-        if (newTags.length === current.tags.length) return
+        if (newTags.length === current.tags.length) {
+          toast.error('Could not change mute visibility. Please try again.', { duration: 10_000 })
+          return
+        }
         const currentPrivate = await decryptSignerPrivateTags(current)
         const newPrivate = currentPrivate
           .filter((t) => t[0] !== 'p' || t[1] !== pubkey)
