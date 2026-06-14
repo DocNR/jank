@@ -1,13 +1,14 @@
 import { useSecondaryPage } from '@/DeckManager'
 import { ExtendedKind, NSFW_DISPLAY_POLICY, SUPPORTED_KINDS } from '@/constants'
 import { cn } from '@/lib/utils'
-import { getParentStuff, isInMutedThread, isNsfwEvent } from '@/lib/event'
+import { getParentStuff, getThreadRootId, isInMutedThread, isNsfwEvent } from '@/lib/event'
 import { toExternalContent, toNote } from '@/lib/link'
 import { generateBech32IdFromATag, generateBech32IdFromETag, tagNameEquals } from '@/lib/tag'
 import { useContentPolicy } from '@/providers/ContentPolicyProvider'
 import { useMuteList } from '@/providers/UserListsProvider'
 import { useScreenSize } from '@/providers/ScreenSizeProvider'
 import { useUserPreferences } from '@/providers/UserPreferencesProvider'
+import { useMutedThreadReveal } from '@/providers/MutedThreadRevealProvider'
 import { Event, kinds } from 'nostr-tools'
 import { ReactNode, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -79,6 +80,10 @@ export default function Note({
   const [showNsfw, setShowNsfw] = useState(false)
   const { mutePubkeySet, muteEventIdSet } = useMuteList()
   const [showMuted, setShowMuted] = useState(false)
+  // Thread reveal is per-column (resets when the column closes) and keyed by
+  // thread root, so revealing the root note also un-hides this thread's replies
+  // — see useFilteredReplies.
+  const { revealed: revealedMutedThreads, reveal: revealMutedThread } = useMutedThreadReveal()
   const isNsfw = useMemo(
     () => (nsfwDisplayPolicy === NSFW_DISPLAY_POLICY.SHOW ? false : isNsfwEvent(event)),
     [event, nsfwDisplayPolicy]
@@ -104,8 +109,11 @@ export default function Note({
     content = <UnknownNote className="mt-1" event={event} />
   } else if (mutePubkeySet.has(event.pubkey) && !showMuted) {
     content = <MutedNote show={() => setShowMuted(true)} />
-  } else if (isInMutedThread(event, muteEventIdSet) && !showMuted) {
-    content = <MutedNote reason="thread" show={() => setShowMuted(true)} />
+  } else if (
+    isInMutedThread(event, muteEventIdSet) &&
+    !revealedMutedThreads.has(getThreadRootId(event))
+  ) {
+    content = <MutedNote reason="thread" show={() => revealMutedThread(getThreadRootId(event))} />
   } else if (isNsfw && !showNsfw) {
     content = <NsfwNote show={() => setShowNsfw(true)} />
   } else if (event.kind === kinds.Highlights) {

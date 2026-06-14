@@ -1088,6 +1088,7 @@ export default {
     Words: 'Words',
     'No muted users': 'No muted users',
     'No muted threads': 'No muted threads',
-    'Muted words apply to all your accounts.': 'Muted words apply to all your accounts.'
+    'Muted words apply to all your accounts.': 'Muted words apply to all your accounts.',
+    'Reveal muted thread': 'Reveal muted thread'
   }
 }
