@@ -7,6 +7,7 @@ import { init, launchPaymentModal } from '@getalby/bitcoin-connect-react'
 import { Invoice } from '@getalby/lightning-tools'
 import { bech32 } from '@scure/base'
 import { WebLNProvider } from '@webbtc/webln-types'
+import DataLoader from 'dataloader'
 import dayjs from 'dayjs'
 import { Filter, kinds, NostrEvent } from 'nostr-tools'
 import { SubCloser } from 'nostr-tools/abstract-pool'
@@ -25,6 +26,15 @@ class LightningService {
   static instance: LightningService
   provider: WebLNProvider | null = null
   private recentSupportersCache: TRecentSupporter[] | null = null
+  private nostrPubkeyLoader = new DataLoader<string, string | null>(
+    async (recipientPubkeys) => {
+      const results = await Promise.allSettled(
+        recipientPubkeys.map((pubkey) => this.fetchRecipientNostrPubkey(pubkey))
+      )
+      return results.map((res) => (res.status === 'fulfilled' ? res.value : null))
+    },
+    { maxBatchSize: 1 }
+  )
 
   constructor() {
     if (!LightningService.instance) {
@@ -212,14 +222,15 @@ class LightningService {
     }
     const relayList = await relayListService.fetchRelayList(CODY_PUBKEY)
     const events = await eventCache.fetchEvents(relayList.read.slice(0, 4), {
-      authors: ['79f00d3f5a19ec806189fcab03c1be4ff81d18ee4f653c88fac41fe03570f432'], // alby
       kinds: [kinds.Zap],
       '#p': OFFICIAL_PUBKEYS,
       since: dayjs().subtract(1, 'month').unix()
     })
     events.sort((a, b) => b.created_at - a.created_at)
+    const validations = await Promise.all(events.map((event) => this.validateZapReceipt(event)))
     const map = new Map<string, { pubkey: string; amount: number; comment?: string }>()
-    events.forEach((event) => {
+    events.forEach((event, index) => {
+      if (!validations[index]) return
       const info = getZapInfoFromEvent(event)
       if (!info || !info.senderPubkey || OFFICIAL_PUBKEYS.includes(info.senderPubkey)) return
 
@@ -238,9 +249,51 @@ class LightningService {
     return this.recentSupportersCache
   }
 
+  /**
+   * Validates a zap receipt (kind 9735) to ensure it represents a real payment.
+   *
+   * Two checks are performed (NIP-57 Appendix F / E):
+   * 1. Issuer check: the receipt must be signed by the `nostrPubkey` advertised
+   *    by the recipient's LNURL pay endpoint. This rejects forged receipts. When
+   *    the endpoint or its `nostrPubkey` can't be resolved, the receipt is
+   *    accepted leniently — we can't prove it forged.
+   * 2. Preimage check: when the receipt carries a `preimage` tag, `sha256(preimage)`
+   *    must equal the bolt11 payment hash. The tag is optional in NIP-57, so its
+   *    absence is not treated as invalid.
+   *
+   * Note: NIP-57 also asks that the bolt11 invoice amount equal the zap request's
+   * `amount` tag. That cross-check is not performed here (matches upstream); the
+   * issuer check is the primary forgery defense.
+   */
+  async validateZapReceipt(receipt: NostrEvent): Promise<boolean> {
+    const info = getZapInfoFromEvent(receipt)
+    if (!info || !info.recipientPubkey || !info.invoice) return false
+
+    if (info.preimage) {
+      try {
+        const invoice = new Invoice({ pr: info.invoice })
+        if (!invoice.validatePreimage(info.preimage)) return false
+      } catch {
+        return false
+      }
+    }
+
+    const nostrPubkey = await this.nostrPubkeyLoader.load(info.recipientPubkey)
+    if (!nostrPubkey) return true
+    return receipt.pubkey === nostrPubkey
+  }
+
+  private async fetchRecipientNostrPubkey(recipientPubkey: string): Promise<string | null> {
+    const profile = await profileFetcher.fetchProfile(recipientPubkey)
+    if (!profile) return null
+    const endpoint = await this.getZapEndpoint(profile)
+    return endpoint?.nostrPubkey ?? null
+  }
+
   private async getZapEndpoint(profile: TProfile): Promise<null | {
     callback: string
     lnurl: string
+    nostrPubkey?: string
   }> {
     try {
       let lnurl: string = ''
@@ -267,7 +320,8 @@ class LightningService {
       if (body.allowsNostr !== false && body.callback) {
         return {
           callback: body.callback,
-          lnurl
+          lnurl,
+          nostrPubkey: typeof body.nostrPubkey === 'string' ? body.nostrPubkey : undefined
         }
       }
     } catch (err) {
