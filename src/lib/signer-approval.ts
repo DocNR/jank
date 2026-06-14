@@ -1,4 +1,5 @@
 import i18n from '@/i18n'
+import { kinds } from 'nostr-tools'
 import { toast } from 'sonner'
 
 // Signers that require manual approval — NIP-46 remote signers (bunker /
@@ -18,6 +19,14 @@ import { toast } from 'sonner'
 const SHOW_DELAY_MS = 1000
 const TIMEOUT_MS = 30_000
 const TOAST_ID = 'signer-approval-waiting'
+
+// NIP-42 relay AUTH (kind 22242) and NIP-98 HTTP AUTH (kind 27235) are signed
+// automatically in the background — relay-connection AUTH, media-upload and
+// translation HTTP auth — never as a user-initiated action. They must not surface
+// an approval-wait toast or be bounded by the user-approval timeout: an AUTH-gated
+// relay the user never manually approves would otherwise spam the toast and reject
+// every background AUTH at the 30s mark.
+const BACKGROUND_SIGN_KINDS = new Set<number>([kinds.ClientAuth, kinds.HTTPAuth])
 
 let pending = 0
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -47,7 +56,15 @@ function hide() {
   }
 }
 
-export async function withSignerApproval<T>(promise: Promise<T>, timeout = TIMEOUT_MS): Promise<T> {
+export async function withSignerApproval<T>(
+  promise: Promise<T>,
+  kind?: number,
+  timeout = TIMEOUT_MS
+): Promise<T> {
+  // Background auth signs pass straight through — no toast, no timeout.
+  if (kind !== undefined && BACKGROUND_SIGN_KINDS.has(kind)) {
+    return promise
+  }
   if (pending === 0) {
     scheduleShow()
   }
