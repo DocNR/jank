@@ -1,6 +1,7 @@
-import { getEventKey, isInMutedThread, isMentioningMutedUsers } from '@/lib/event'
+import { getEventKey, getThreadRootId, isInMutedThread, isMentioningMutedUsers } from '@/lib/event'
 import { useContentPolicy } from '@/providers/ContentPolicyProvider'
 import { useMuteList } from '@/providers/UserListsProvider'
+import { useMutedThreadReveal } from '@/providers/MutedThreadRevealProvider'
 import { useNostr } from '@/providers/NostrProvider'
 import { NostrEvent } from 'nostr-tools'
 import { useEffect, useState } from 'react'
@@ -10,6 +11,7 @@ export function useFilteredReplies(stuffKey: string) {
   const { pubkey } = useNostr()
   const { mutePubkeySet, muteEventIdSet } = useMuteList()
   const { hideContentMentioningMutedUsers } = useContentPolicy()
+  const { revealed: revealedMutedThreads } = useMutedThreadReveal()
   const allThreads = useAllDescendantThreads(stuffKey)
   const [replies, setReplies] = useState<NostrEvent[]>([])
   const [hasReplied, setHasReplied] = useState(false)
@@ -25,7 +27,8 @@ export function useFilteredReplies(stuffKey: string) {
       replyKeySet.add(key)
 
       if (mutePubkeySet.has(evt.pubkey)) continue
-      if (isInMutedThread(evt, muteEventIdSet)) continue
+      if (isInMutedThread(evt, muteEventIdSet) && !revealedMutedThreads.has(getThreadRootId(evt)))
+        continue
       if (hideContentMentioningMutedUsers && isMentioningMutedUsers(evt, mutePubkeySet)) continue
 
       filtered.push(evt)
@@ -33,7 +36,14 @@ export function useFilteredReplies(stuffKey: string) {
 
     filtered.sort((a, b) => b.created_at - a.created_at)
     setReplies(filtered)
-  }, [stuffKey, allThreads, mutePubkeySet, muteEventIdSet, hideContentMentioningMutedUsers])
+  }, [
+    stuffKey,
+    allThreads,
+    mutePubkeySet,
+    muteEventIdSet,
+    revealedMutedThreads,
+    hideContentMentioningMutedUsers
+  ])
 
   useEffect(() => {
     let replied = false
@@ -54,6 +64,7 @@ export function useFilteredAllReplies(stuffKey: string) {
   const allThreads = useAllDescendantThreads(stuffKey)
   const { mutePubkeySet, muteEventIdSet } = useMuteList()
   const { hideContentMentioningMutedUsers } = useContentPolicy()
+  const { revealed: revealedMutedThreads } = useMutedThreadReveal()
   const [replies, setReplies] = useState<NostrEvent[]>([])
   const [hasReplied, setHasReplied] = useState(false)
 
@@ -70,6 +81,8 @@ export function useFilteredAllReplies(stuffKey: string) {
         replyKeySet.add(key)
 
         if (mutePubkeySet.has(evt.pubkey)) continue
+        if (isInMutedThread(evt, muteEventIdSet) && !revealedMutedThreads.has(getThreadRootId(evt)))
+          continue
         if (hideContentMentioningMutedUsers && isMentioningMutedUsers(evt, mutePubkeySet)) continue
 
         replyEvents.push(evt)
@@ -77,7 +90,14 @@ export function useFilteredAllReplies(stuffKey: string) {
       parentKeys = events.map((evt) => getEventKey(evt))
     }
     setReplies(replyEvents.sort((a, b) => a.created_at - b.created_at))
-  }, [stuffKey, allThreads, mutePubkeySet, muteEventIdSet, hideContentMentioningMutedUsers])
+  }, [
+    stuffKey,
+    allThreads,
+    mutePubkeySet,
+    muteEventIdSet,
+    revealedMutedThreads,
+    hideContentMentioningMutedUsers
+  ])
 
   useEffect(() => {
     let replied = false

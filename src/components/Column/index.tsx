@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { useColumns } from '@/providers/ColumnsProvider'
 import { AccountScope } from '@/providers/AccountScope'
 import { ScrollContainerProvider } from '@/providers/ScrollContainerProvider'
+import { MutedThreadRevealProvider } from '@/providers/MutedThreadRevealProvider'
 import { useScreenSize } from '@/providers/ScreenSizeProvider'
 import { useUserPreferences } from '@/providers/UserPreferencesProvider'
 import { useNostr } from '@/providers/NostrProvider'
@@ -332,7 +333,9 @@ export function Column({ column, dragHandleProps, style }: Props) {
                 viewContext={column.viewContext}
                 signingIdentity={column.signingIdentity}
               >
-                <Suspense fallback={<ColumnBodyLoading />}>{dispatchBody(column)}</Suspense>
+                <MutedThreadRevealProvider>
+                  <Suspense fallback={<ColumnBodyLoading />}>{dispatchBody(column)}</Suspense>
+                </MutedThreadRevealProvider>
               </ScopedSecondaryPage>
             </AccountScope>
           </ScrollContainerProvider>

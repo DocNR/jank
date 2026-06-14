@@ -26,7 +26,7 @@ export default function MutedNote({
         variant="outline"
       >
         <Eye />
-        {t('Temporarily display this note')}
+        {reason === 'thread' ? t('Reveal muted thread') : t('Temporarily display this note')}
       </Button>
     </div>
   )
