@@ -15,6 +15,13 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.14.1',
+    date: '2026-06-14',
+    highlights: [
+      'The Muted list now spells out whether each muted user is Public or Private, with a globe or lock label and a tooltip explaining what it means, instead of an unlabeled icon. Switching a mute between public and private is now instant, and tells you if it could not be saved instead of silently doing nothing.'
+    ]
+  },
+  {
     version: '26.14.0',
     date: '2026-06-14',
     highlights: [
