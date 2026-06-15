@@ -20,6 +20,8 @@ export type TWireWorkspace = {
   version: 1
   activeDeckId: string
   decks: TWireDeck[]
+  /** deckId → deletedAt (unix ms). Omitted when empty. */
+  deletedDecks?: Record<string, number>
 }
 
 export type TDecodeResult =
