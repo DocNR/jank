@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TAccountWorkspace, TColumn, TDeck, TPairedAgent } from '@/types/column'
-import { mergePairedAgents, mergeRemoteWorkspace } from '@/services/deck-sync-merge'
+import { DECK_TOMBSTONE_TTL_MS, mergePairedAgents, mergeRemoteWorkspace } from '@/services/deck-sync-merge'
 
 const col = (id = 'c'): TColumn => ({ id, viewContext: 'pk', signingIdentity: 'pk', type: 'home' })
 const deck = (over: Partial<TDeck> & { id: string }): TDeck => ({
@@ -49,7 +49,7 @@ describe('mergeRemoteWorkspace', () => {
     expect(conflicts.map((d) => d.id)).toEqual(['a'])
   })
 
-  it('keeps a local-only deck not present remotely (no delete propagation)', () => {
+  it('keeps a local-only deck with no tombstone (newly created, not yet synced)', () => {
     const local = ws('a', [deck({ id: 'a' }), deck({ id: 'local-only' })])
     const remote = ws('a', [deck({ id: 'a' })])
     expect(mergeRemoteWorkspace(local, remote).merged.decks.map((d) => d.id)).toContain('local-only')
@@ -59,6 +59,126 @@ describe('mergeRemoteWorkspace', () => {
     const local: TAccountWorkspace = { activeDeckId: 'ghost', decks: [deck({ id: 'a' })] }
     const remote = ws('a', [deck({ id: 'a' })])
     expect(mergeRemoteWorkspace(local, remote).merged.activeDeckId).toBe('a')
+  })
+
+  const NOW = 1_700_000_000_000 // fixed "now" for deterministic GC
+
+  it('drops a tombstoned deck that was deleted after its last save (delete propagates)', () => {
+    const local: TAccountWorkspace = {
+      activeDeckId: 'a',
+      decks: [deck({ id: 'a' })],
+      deletedDecks: { b: NOW - 1000 }
+    }
+    const remote = ws('a', [deck({ id: 'a' }), deck({ id: 'b', lastSavedAt: NOW - 5000 })])
+    const { merged } = mergeRemoteWorkspace(local, remote, NOW)
+    expect(merged.decks.map((d) => d.id)).toEqual(['a'])
+    expect(merged.deletedDecks).toEqual({ b: NOW - 1000 })
+  })
+
+  it('does not resurrect: remote re-introduces a deck the local tombstone covers', () => {
+    const local: TAccountWorkspace = {
+      activeDeckId: 'a',
+      decks: [deck({ id: 'a' }), deck({ id: 'b', lastSavedAt: NOW - 5000 })],
+      deletedDecks: { b: NOW - 1000 }
+    }
+    const remote = ws('a', [deck({ id: 'a' })])
+    const { merged } = mergeRemoteWorkspace(local, remote, NOW)
+    expect(merged.decks.map((d) => d.id)).toEqual(['a'])
+  })
+
+  it('resurrects a tombstoned deck saved AFTER the delete (LWW) and clears its tombstone', () => {
+    const local: TAccountWorkspace = {
+      activeDeckId: 'a',
+      decks: [deck({ id: 'a' })],
+      deletedDecks: { b: NOW - 1000 }
+    }
+    const remote = ws('a', [deck({ id: 'a' }), deck({ id: 'b', lastSavedAt: NOW })])
+    const { merged } = mergeRemoteWorkspace(local, remote, NOW)
+    expect(merged.decks.map((d) => d.id)).toEqual(['a', 'b'])
+    expect(merged.deletedDecks).toBeUndefined()
+  })
+
+  it('keeps a tombstoned-but-dirty local deck and reports it as a conflict', () => {
+    const dirty = deck({
+      id: 'b',
+      columns: [col('x'), col('y')],
+      savedColumns: [col('x')],
+      lastSavedAt: NOW - 5000
+    })
+    const local: TAccountWorkspace = {
+      activeDeckId: 'b',
+      decks: [deck({ id: 'a' }), dirty],
+      deletedDecks: { b: NOW - 1000 }
+    }
+    const remote = ws('a', [deck({ id: 'a' })])
+    const { merged, conflicts } = mergeRemoteWorkspace(local, remote, NOW)
+    expect(merged.decks.map((d) => d.id)).toContain('b')
+    expect(conflicts.map((d) => d.id)).toContain('b')
+    expect(merged.deletedDecks).toBeUndefined()
+  })
+
+  it('keeps a local-only deck that is tombstoned but dirty, reporting it as a conflict', () => {
+    const dirty = deck({
+      id: 'b',
+      columns: [col('x'), col('y')],
+      savedColumns: [col('x')],
+      lastSavedAt: NOW - 5000
+    })
+    const local: TAccountWorkspace = {
+      activeDeckId: 'a',
+      decks: [deck({ id: 'a' }), dirty], // 'b' is local-only (absent from remote) + tombstoned
+      deletedDecks: { b: NOW - 1000 }
+    }
+    const remote = ws('a', [deck({ id: 'a' })])
+    const { merged, conflicts } = mergeRemoteWorkspace(local, remote, NOW)
+    expect(merged.decks.map((d) => d.id)).toContain('b')
+    expect(conflicts.map((d) => d.id)).toContain('b')
+    expect(merged.deletedDecks).toBeUndefined()
+  })
+
+  it('unions tombstones taking the max timestamp', () => {
+    const local: TAccountWorkspace = {
+      activeDeckId: 'a',
+      decks: [deck({ id: 'a' })],
+      deletedDecks: { x: NOW - 100, y: NOW - 9000 }
+    }
+    const remote: TAccountWorkspace = {
+      activeDeckId: 'a',
+      decks: [deck({ id: 'a' })],
+      deletedDecks: { x: NOW - 5000, z: NOW - 7000 }
+    }
+    const { merged } = mergeRemoteWorkspace(local, remote, NOW)
+    expect(merged.deletedDecks).toEqual({ x: NOW - 100, y: NOW - 9000, z: NOW - 7000 })
+  })
+
+  it('garbage-collects tombstones older than the TTL (using injected now)', () => {
+    const local: TAccountWorkspace = {
+      activeDeckId: 'a',
+      decks: [deck({ id: 'a' })],
+      deletedDecks: { fresh: NOW - 1000, stale: NOW - DECK_TOMBSTONE_TTL_MS - 1000 }
+    }
+    const remote = ws('a', [deck({ id: 'a' })])
+    const { merged } = mergeRemoteWorkspace(local, remote, NOW)
+    expect(merged.deletedDecks).toEqual({ fresh: NOW - 1000 })
+  })
+
+  it('never returns zero decks: keeps the newest candidate even if all are tombstoned', () => {
+    const local: TAccountWorkspace = {
+      activeDeckId: 'a',
+      decks: [deck({ id: 'a', lastSavedAt: 1 }), deck({ id: 'b', lastSavedAt: 9 })],
+      deletedDecks: { a: NOW, b: NOW }
+    }
+    const remote = ws('a', [])
+    const { merged } = mergeRemoteWorkspace(local, remote, NOW)
+    expect(merged.decks.map((d) => d.id)).toEqual(['b'])
+  })
+
+  it('treats a remote workspace with no deletedDecks as no tombstones (back-compat)', () => {
+    const local: TAccountWorkspace = { activeDeckId: 'a', decks: [deck({ id: 'a' })] }
+    const remote = ws('a', [deck({ id: 'a' }), deck({ id: 'b' })])
+    const { merged } = mergeRemoteWorkspace(local, remote, NOW)
+    expect(merged.decks.map((d) => d.id)).toEqual(['a', 'b'])
+    expect(merged.deletedDecks).toBeUndefined()
   })
 })
 
