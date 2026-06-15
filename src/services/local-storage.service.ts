@@ -1422,6 +1422,7 @@ class LocalStorageService {
         lastSavedAt: now
       }
       return {
+        ...workspace,
         decks: [...workspace.decks, newDeck],
         activeDeckId: newDeck.id // switches active to new
       }
@@ -1442,6 +1443,7 @@ class LocalStorageService {
         lastSavedAt: now
       }
       return {
+        ...workspace,
         decks: [...workspace.decks, newDeck],
         activeDeckId: newDeck.id
       }

@@ -471,3 +471,49 @@ describe('LocalStorageService.deleteDeck — tombstones', () => {
     expect(ws.decks.map((d) => d.id)).toEqual(['a'])
   })
 })
+
+describe('LocalStorageService — addEmptyDeck/saveActiveDeckAs preserve workspace fields', () => {
+  beforeEach(() => window.localStorage.clear())
+
+  const mkDeck = (id: string): TDeck => ({
+    id,
+    name: id,
+    columns: [],
+    savedColumns: [],
+    createdAt: 1,
+    updatedAt: 1,
+    lastSavedAt: 1
+  })
+
+  const seed = () =>
+    storage.setWorkspacesByAccount({
+      pk: {
+        activeDeckId: 'a',
+        decks: [mkDeck('a')],
+        deletedDecks: { b: 123 },
+        pairedAgents: [{ pubkey: 'h', npub: 'npub1x', scope: 'read-only', pairedAt: 1 }],
+        allowSiblingExposure: true
+      }
+    })
+
+  it('addEmptyDeck preserves deletedDecks, pairedAgents, allowSiblingExposure', () => {
+    seed()
+    storage.setActiveAccountPubkey('pk')
+    storage.addEmptyDeck({ name: 'New' })
+    const ws = storage.getWorkspacesByAccount()['pk']
+    expect(ws.deletedDecks).toEqual({ b: 123 })
+    expect(ws.pairedAgents).toHaveLength(1)
+    expect(ws.allowSiblingExposure).toBe(true)
+    expect(ws.decks.map((d) => d.id)).toContain('a')
+  })
+
+  it('saveActiveDeckAs preserves deletedDecks, pairedAgents, allowSiblingExposure', () => {
+    seed()
+    storage.setActiveAccountPubkey('pk')
+    storage.saveActiveDeckAs({ name: 'Copy' })
+    const ws = storage.getWorkspacesByAccount()['pk']
+    expect(ws.deletedDecks).toEqual({ b: 123 })
+    expect(ws.pairedAgents).toHaveLength(1)
+    expect(ws.allowSiblingExposure).toBe(true)
+  })
+})
