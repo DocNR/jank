@@ -367,6 +367,52 @@ describe('read-notifications storage', () => {
   })
 })
 
+describe('LocalStorageService.restoreDeck — undo clears tombstone', () => {
+  beforeEach(() => window.localStorage.clear())
+
+  const mkDeck = (id: string): TDeck => ({
+    id,
+    name: id,
+    columns: [],
+    savedColumns: [],
+    createdAt: 1,
+    updatedAt: 1,
+    lastSavedAt: 1
+  })
+
+  it('re-inserts the deck at the index, clears its tombstone, preserves other fields', () => {
+    storage.setWorkspacesByAccount({
+      pk: {
+        activeDeckId: 'a',
+        decks: [mkDeck('a')],
+        deletedDecks: { b: 123, c: 456 },
+        allowSiblingExposure: true
+      }
+    })
+    storage.setActiveAccountPubkey('pk')
+    storage.restoreDeck('pk', mkDeck('b'), 1)
+
+    const ws = storage.getWorkspacesByAccount()['pk']
+    expect(ws.decks.map((d) => d.id)).toEqual(['a', 'b'])
+    expect(ws.activeDeckId).toBe('b')
+    expect(ws.deletedDecks).toEqual({ c: 456 }) // 'b' cleared, 'c' kept
+    expect(ws.allowSiblingExposure).toBe(true)
+  })
+
+  it('drops the lone Untitled guard deck when restoring', () => {
+    const untitled = { ...mkDeck('u'), name: 'Untitled deck' }
+    storage.setWorkspacesByAccount({
+      pk: { activeDeckId: 'u', decks: [untitled], deletedDecks: { b: 123 } }
+    })
+    storage.setActiveAccountPubkey('pk')
+    storage.restoreDeck('pk', mkDeck('b'), 0)
+
+    const ws = storage.getWorkspacesByAccount()['pk']
+    expect(ws.decks.map((d) => d.id)).toEqual(['b'])
+    expect(ws.deletedDecks).toBeUndefined() // last tombstone cleared → key omitted
+  })
+})
+
 describe('LocalStorageService.deleteDeck — tombstones', () => {
   beforeEach(() => window.localStorage.clear())
 
