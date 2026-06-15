@@ -1,3 +1,4 @@
+import { BRAND } from '@/branding'
 import { withSignerApproval } from '@/lib/signer-approval'
 import { ISigner, TDraftEvent } from '@/types'
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils'
@@ -34,7 +35,29 @@ export class BunkerSigner implements ISigner {
       }
     })
     if (isInitialConnection) {
-      await this.signer.connect()
+      // Replicate nostr-tools' BunkerSigner.connect() but append a 4th param
+      // carrying jank's client metadata (name/url/image) so the remote signer
+      // (Clave/Amber/etc.) shows "Jank" instead of a generic app name. The
+      // library's connect() only sends [pubkey, secret] and exposes no metadata
+      // argument, so we issue the request ourselves. This mirrors the metadata
+      // jank already advertises in its nostrconnect:// URI.
+      //
+      // Wire contract: signers decode `params` as string[] and discard the whole
+      // array if any element is a non-string. params[2] is the permissions slot,
+      // kept as '' (jank requests none) so the metadata still lands in slot 3;
+      // params[3] is a JSON *string* (not a nested object), keys exactly
+      // name/url/image.
+      const clientMetadata = JSON.stringify({
+        name: 'Jank',
+        url: BRAND.homepage,
+        image: `${BRAND.homepage}/apple-touch-icon.png`
+      })
+      await this.signer.sendRequest('connect', [
+        bunkerPointer.pubkey,
+        bunkerPointer.secret || '',
+        '',
+        clientMetadata
+      ])
       // Initial connection (interactive pairing): block on the probe with a
       // timeout so the deck-sync flow has a definitive v3 answer before its
       // first encrypt. This path isn't latency-sensitive (one-time pairing).
