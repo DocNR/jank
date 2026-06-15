@@ -366,3 +366,62 @@ describe('read-notifications storage', () => {
     expect(storage.getReadNotifications('pk2')).toEqual(['x', 'y'])
   })
 })
+
+describe('LocalStorageService.deleteDeck — tombstones', () => {
+  beforeEach(() => window.localStorage.clear())
+
+  const mkDeck = (id: string): TDeck => ({
+    id,
+    name: id,
+    columns: [],
+    savedColumns: [],
+    createdAt: 1,
+    updatedAt: 1,
+    lastSavedAt: 1
+  })
+
+  it('writes a tombstone and preserves other workspace fields on delete', () => {
+    storage.setWorkspacesByAccount({
+      pk: {
+        activeDeckId: 'a',
+        decks: [mkDeck('a'), mkDeck('b')],
+        pairedAgents: [{ pubkey: 'h', npub: 'npub1x', scope: 'read-only', pairedAt: 1 }],
+        allowSiblingExposure: true
+      }
+    })
+    storage.setActiveAccountPubkey('pk')
+    const before = Date.now()
+    storage.deleteDeck('b')
+
+    const ws = storage.getWorkspacesByAccount()['pk']
+    expect(ws.decks.map((d) => d.id)).toEqual(['a'])
+    expect(ws.deletedDecks?.['b']).toBeGreaterThanOrEqual(before)
+    expect(ws.pairedAgents).toHaveLength(1) // regression: optional fields not dropped
+    expect(ws.allowSiblingExposure).toBe(true)
+  })
+
+  it('tombstones the deleted deck even when the last-deck guard fires', () => {
+    storage.setWorkspacesByAccount({ pk: { activeDeckId: 'only', decks: [mkDeck('only')] } })
+    storage.setActiveAccountPubkey('pk')
+    storage.deleteDeck('only')
+
+    const ws = storage.getWorkspacesByAccount()['pk']
+    expect(ws.deletedDecks?.['only']).toBeTypeOf('number')
+    expect(ws.decks).toHaveLength(1)
+    expect(ws.decks[0].name).toBe('Untitled deck')
+  })
+
+  it('accumulates tombstones across sequential deletes', () => {
+    storage.setWorkspacesByAccount({
+      pk: { activeDeckId: 'a', decks: [mkDeck('a'), mkDeck('b'), mkDeck('c')] }
+    })
+    storage.setActiveAccountPubkey('pk')
+    storage.deleteDeck('b')
+    storage.deleteDeck('c')
+
+    const ws = storage.getWorkspacesByAccount()['pk']
+    expect(ws.deletedDecks?.['b']).toBeTypeOf('number')
+    expect(ws.deletedDecks?.['c']).toBeTypeOf('number')
+    expect(ws.decks.map((d) => d.id)).toEqual(['a'])
+  })
+})

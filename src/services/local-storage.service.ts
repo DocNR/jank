@@ -1491,10 +1491,11 @@ class LocalStorageService {
     this.mutateActiveWorkspace((workspace) => {
       const idx = workspace.decks.findIndex((d) => d.id === deckId)
       if (idx < 0) return workspace
+      const now = Date.now()
+      const deletedDecks = { ...(workspace.deletedDecks ?? {}), [deckId]: now }
       const nextDecks = workspace.decks.filter((d) => d.id !== deckId)
       // Last-deck guard.
       if (nextDecks.length === 0) {
-        const now = Date.now()
         const untitled: TDeck = {
           id: randomId(),
           name: 'Untitled deck',
@@ -1504,13 +1505,13 @@ class LocalStorageService {
           updatedAt: now,
           lastSavedAt: now
         }
-        return { decks: [untitled], activeDeckId: untitled.id }
+        return { ...workspace, decks: [untitled], activeDeckId: untitled.id, deletedDecks }
       }
       let nextActiveId = workspace.activeDeckId
       if (workspace.activeDeckId === deckId) {
         nextActiveId = nextDecks[Math.min(idx, nextDecks.length - 1)].id
       }
-      return { decks: nextDecks, activeDeckId: nextActiveId }
+      return { ...workspace, decks: nextDecks, activeDeckId: nextActiveId, deletedDecks }
     })
   }
 
