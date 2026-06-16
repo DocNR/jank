@@ -1,8 +1,8 @@
 /**
  * TopBar — single chrome region for the app shell.
  *
- * Mobile: brand · empty middle · Add column · AccountButton compact
- *   (BottomBar handles Home + Post; swipe + page-dot covers nav)
+ * Mobile: brand · DeckSwitcher · spacer · AgentChat · Add column · Account
+ *   (BottomBar handles Home + Post; swipe + page-dot covers column nav)
  * Desktop: brand · QuickJumps (5 icons) · spacer · Compose · Add column · AccountButton compact
  *
  * Surfaces Settings / Wallet / account switch via the AccountButton dropdown,
@@ -47,7 +47,7 @@ export default function TopBar() {
         >
           <JankMark size={28} />
         </button>
-        {!isSmallScreen && <DeckSwitcher />}
+        <DeckSwitcher />
         {!isSmallScreen && <QuickJumps />}
         <div className="flex-1" aria-hidden />
         <div className="flex shrink-0 items-center gap-2">

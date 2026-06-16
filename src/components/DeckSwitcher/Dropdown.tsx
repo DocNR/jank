@@ -112,7 +112,7 @@ export default function DeckSwitcher() {
             aria-haspopup="menu"
             aria-expanded={open}
           >
-            <span className="max-w-[160px] truncate" dir="auto">
+            <span className="max-w-[120px] truncate md:max-w-[160px]" dir="auto">
               {chipState.name}
             </span>
             {chipState.showDirtyPip && (

@@ -17,9 +17,11 @@ type Props = {
  * page. The active dot tints to the column's account hue so the indicator
  * doubles as a "whose perspective am I on?" reference at a glance.
  *
- * Positioned above the BottomBar via the `--bottom-bar-offset` CSS variable
- * the Shell sets on its stacked-layout wrapper. `z-30` sits below the bottom
- * bar (`z-40`) and below drawers / modals (`z-50+`).
+ * Positioned above the BottomBar. The bar is a 3rem (h-12) button row plus
+ * `env(safe-area-inset-bottom)` (the home-indicator inset), so the pager has
+ * to offset by both — offsetting by a flat 3rem tucks it behind the bar on
+ * home-indicator iPhones. `z-30` sits below the bottom bar (`z-40`) and below
+ * drawers / modals (`z-50+`).
  *
  * The buttons are wrapped in larger transparent tap-targets so a thumb can
  * still hit them despite the visual dot being small.
@@ -33,7 +35,7 @@ export default function ColumnPageIndicator({
   return (
     <div
       className="pointer-events-none fixed inset-x-0 z-30 flex justify-center"
-      style={{ bottom: 'calc(var(--bottom-bar-offset, 3rem) + 0.5rem)' }}
+      style={{ bottom: 'calc(3rem + env(safe-area-inset-bottom) + 0.5rem)' }}
       aria-hidden={columns.length === 0}
     >
       <div
