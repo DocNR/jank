@@ -11,8 +11,14 @@
  */
 import DeckSwitcher from '@/components/DeckSwitcher'
 import JankMark from '@/components/JankMark'
+import { columnOverviewOpenAtom } from '@/atoms/active-column'
 import { useScreenSize } from '@/providers/ScreenSizeProvider'
+import { useSetAtom } from 'jotai'
+import { LayoutGrid } from 'lucide-react'
 import { useCallback } from 'react'
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useTranslation } from 'react-i18next'
 import AccountButton from './AccountButton'
 import AddColumnButton from './AddColumnButton'
 import AgentChatButton from './AgentChatButton'
@@ -21,7 +27,9 @@ import MobileWarningBanner from './MobileWarningBanner'
 import QuickJumps from './QuickJumps'
 
 export default function TopBar() {
+  const { t } = useTranslation()
   const { isSmallScreen } = useScreenSize()
+  const setOverviewOpen = useSetAtom(columnOverviewOpenAtom)
 
   // Brand tap → scroll the deck horizontally back to its first column. Home
   // is the only primary "page" in Phase 2 so no navigate is needed.
@@ -52,6 +60,21 @@ export default function TopBar() {
         <div className="flex-1" aria-hidden />
         <div className="flex shrink-0 items-center gap-2">
           {!isSmallScreen && <ComposeButton />}
+          {!isSmallScreen && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t('Show all columns')}
+                  onClick={() => setOverviewOpen(true)}
+                >
+                  <LayoutGrid className="size-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('Show all columns')}</TooltipContent>
+            </Tooltip>
+          )}
           <AgentChatButton />
           <AddColumnButton />
           <AccountButton compact />

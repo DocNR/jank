@@ -2,13 +2,15 @@
 import { cn } from '@/lib/utils'
 import { pubkeyToHsl } from '@/lib/pubkey'
 import { TColumn } from '@/types/column'
-import { Plus } from 'lucide-react'
+import { LayoutGrid, Plus } from 'lucide-react'
 
 type Props = {
   columns: TColumn[]
   activeColumnId: string | null
   onJumpToColumn: (id: string) => void
   onJumpToAddPlaceholder: () => void
+  /** Open the column overview ("exploding tabs") overlay. */
+  onOpenOverview: () => void
 }
 
 /**
@@ -30,7 +32,8 @@ export default function ColumnPageIndicator({
   columns,
   activeColumnId,
   onJumpToColumn,
-  onJumpToAddPlaceholder
+  onJumpToAddPlaceholder,
+  onOpenOverview
 }: Props) {
   return (
     <div
@@ -42,6 +45,14 @@ export default function ColumnPageIndicator({
         className="bg-card/95 border-border pointer-events-auto flex items-center gap-0.5 rounded-full border px-2 py-1 shadow-md"
         role="tablist"
       >
+        <button
+          type="button"
+          aria-label="Show all columns"
+          onClick={onOpenOverview}
+          className="text-muted-foreground hover:text-foreground me-0.5 flex h-7 w-7 items-center justify-center"
+        >
+          <LayoutGrid className="size-3.5" />
+        </button>
         {columns.map((c) => {
           const isActive = c.id === activeColumnId
           const hue = pubkeyToHsl(c.viewContext)

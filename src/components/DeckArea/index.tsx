@@ -11,6 +11,7 @@ import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortabl
 import {
   activeColumnIdAtom,
   addColumnDialogOpenAtom,
+  columnOverviewOpenAtom,
   focusBeamActiveAtom,
   focusedColumnRequestAtom
 } from '@/atoms/active-column'
@@ -19,9 +20,10 @@ import { useColumns } from '@/providers/ColumnsProvider'
 import { useNostr } from '@/providers/NostrProvider'
 import { useScreenSize } from '@/providers/ScreenSizeProvider'
 import { useUserPreferences } from '@/providers/UserPreferencesProvider'
-import { useAtom } from 'jotai'
+import { useAtom, useSetAtom } from 'jotai'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import AddColumnModal from '@/components/AddColumnModal'
+import ColumnOverview from '@/components/ColumnOverview'
 import AddColumnPlaceholder from './AddColumnPlaceholder'
 import ColumnPageIndicator from './ColumnPageIndicator'
 import EmptyDeckCTA from './EmptyDeckCTA'
@@ -45,6 +47,7 @@ export default function DeckArea() {
   const [addOpen, setAddOpen] = useAtom(addColumnDialogOpenAtom)
   const [focusBeamActive, setFocusBeamActive] = useAtom(focusBeamActiveAtom)
   const [focusedRequest, setFocusedRequest] = useAtom(focusedColumnRequestAtom)
+  const setOverviewOpen = useSetAtom(columnOverviewOpenAtom)
   const { isSmallScreen } = useScreenSize()
   const scrollerRef = useRef<HTMLDivElement>(null)
   const prevColumnsRef = useRef(columns)
@@ -330,6 +333,7 @@ export default function DeckArea() {
             if (!scroller) return
             scroller.scrollTo({ left: scroller.scrollWidth, behavior: 'instant' })
           }}
+          onOpenOverview={() => setOverviewOpen(true)}
         />
       )}
       {/* Focus Beam scrim — viewport-fixed overlay above the deck (z-40),
@@ -340,6 +344,7 @@ export default function DeckArea() {
           viewport. */}
       {scrimMounted && !isSmallScreen && <FocusBeamScrim active={focusBeamActive} />}
       <AddColumnModal open={addOpen} onOpenChange={setAddOpen} onAdd={addColumn} />
+      <ColumnOverview />
     </>
   )
 }
