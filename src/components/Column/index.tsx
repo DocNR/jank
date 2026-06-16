@@ -324,7 +324,12 @@ export function Column({ column, dragHandleProps, style }: Props) {
         <div
           ref={bodyRef}
           data-column-body
-          className="min-h-0 flex-1 overflow-y-auto [&_.sticky]:!top-0"
+          // Mobile bottom padding so a column's last content clears the fixed
+          // bottom bar + page-dot pager (which overlay the deck). Applies to
+          // every column body — finite content (settings, mute, profile) was
+          // getting cut off; feeds just gain a little scroll-past room. Desktop
+          // has no bottom chrome, so it's mobile-only.
+          className="min-h-0 flex-1 overflow-y-auto max-md:pb-[calc(6rem+env(safe-area-inset-bottom))] [&_.sticky]:!top-0"
         >
           <ScrollContainerProvider scrollRef={bodyRef}>
             <AccountScope
