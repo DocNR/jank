@@ -182,6 +182,11 @@ export type TAccountWorkspace = {
    *  posture). Toggled via Settings → Agents → "Allow agents to see your other
    *  paired accounts" with a disclosure dialog. See spec §10. */
   allowSiblingExposure?: boolean
+  /** deckId → deletedAt (unix ms). A deck whose id is here is suppressed on
+   *  merge unless a later save (lastSavedAt > deletedAt) resurrects it, or it
+   *  has unsaved local edits (kept + reported as a conflict). GC'd after
+   *  DECK_TOMBSTONE_TTL_MS. Optional for backward compat. */
+  deletedDecks?: Record<string, number>
 }
 
 /** A paired AI agent. v1 is read-only scope; v2 will add 'full'. See spec §6.1. */

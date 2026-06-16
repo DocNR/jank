@@ -3,6 +3,17 @@ import type { TDecodeResult, TWireColumn, TWireDeck, TWireWorkspace } from '@/ty
 
 const WIRE_VERSION = 1
 
+/** Coerce an unknown value into a clean deckId→ms map, dropping non-number
+ *  entries. Returns undefined when nothing valid remains. */
+function sanitizeDeletedDecks(v: unknown): Record<string, number> | undefined {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return undefined
+  const out: Record<string, number> = {}
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof val === 'number' && Number.isFinite(val)) out[k] = val
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 function toWireColumn(c: TColumn): TWireColumn {
   const wire: TWireColumn = {
     id: c.id,
@@ -36,6 +47,9 @@ export function encodeWorkspace(workspace: TAccountWorkspace): string {
       lastSavedAt: d.lastSavedAt,
       columns: d.savedColumns.filter((c) => !c.transient).map(toWireColumn)
     }))
+  }
+  if (workspace.deletedDecks && Object.keys(workspace.deletedDecks).length > 0) {
+    wire.deletedDecks = { ...workspace.deletedDecks }
   }
   return JSON.stringify(wire)
 }
@@ -81,9 +95,14 @@ export function decodeWorkspace(json: string): TDecodeResult {
     columns: wd.columns.map(fromWireColumn),
     savedColumns: wd.columns.map(fromWireColumn)
   }))
+  const deletedDecks = sanitizeDeletedDecks(parsed.deletedDecks)
   return {
     ok: true,
-    workspace: { activeDeckId: parsed.activeDeckId, decks },
+    workspace: {
+      activeDeckId: parsed.activeDeckId,
+      decks,
+      ...(deletedDecks ? { deletedDecks } : {})
+    },
     version: parsed.version
   }
 }

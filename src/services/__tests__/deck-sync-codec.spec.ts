@@ -102,3 +102,56 @@ describe('deck-sync-codec', () => {
     expect(d.columns[0].config).toEqual(d.savedColumns[0].config)
   })
 })
+
+describe('deck-sync-codec — deletedDecks tombstones', () => {
+  it('round-trips deletedDecks', () => {
+    const decoded = decodeWorkspace(encodeWorkspace(workspace({ deletedDecks: { x: 111, y: 222 } })))
+    expect(decoded.ok).toBe(true)
+    if (!decoded.ok) return
+    expect(decoded.workspace.deletedDecks).toEqual({ x: 111, y: 222 })
+  })
+
+  it('omits deletedDecks from the wire when empty', () => {
+    const json = encodeWorkspace(workspace({ deletedDecks: {} }))
+    expect(json).not.toContain('deletedDecks')
+    const decoded = decodeWorkspace(json)
+    expect(decoded.ok).toBe(true)
+    if (!decoded.ok) return
+    expect(decoded.workspace.deletedDecks).toBeUndefined()
+  })
+
+  it('decodes a blob without deletedDecks (back-compat) and keeps version 1', () => {
+    const json = encodeWorkspace(workspace())
+    expect(JSON.parse(json).version).toBe(1)
+    const decoded = decodeWorkspace(json)
+    expect(decoded.ok).toBe(true)
+    if (!decoded.ok) return
+    expect(decoded.workspace.deletedDecks).toBeUndefined()
+  })
+
+  it('ignores a non-object deletedDecks (array) rather than producing index keys', () => {
+    const json = JSON.stringify({
+      version: 1,
+      activeDeckId: 'd1',
+      decks: [{ id: 'd1', name: 'My Deck', createdAt: 1, updatedAt: 1, lastSavedAt: 1, columns: [] }],
+      deletedDecks: [123, 456]
+    })
+    const decoded = decodeWorkspace(json)
+    expect(decoded.ok).toBe(true)
+    if (!decoded.ok) return
+    expect(decoded.workspace.deletedDecks).toBeUndefined()
+  })
+
+  it('sanitizes malformed deletedDecks (non-number values dropped) rather than failing', () => {
+    const json = JSON.stringify({
+      version: 1,
+      activeDeckId: 'd1',
+      decks: [{ id: 'd1', name: 'My Deck', createdAt: 1, updatedAt: 1, lastSavedAt: 1, columns: [] }],
+      deletedDecks: { good: 123, bad: 'oops', alsoBad: null }
+    })
+    const decoded = decodeWorkspace(json)
+    expect(decoded.ok).toBe(true)
+    if (!decoded.ok) return
+    expect(decoded.workspace.deletedDecks).toEqual({ good: 123 })
+  })
+})
