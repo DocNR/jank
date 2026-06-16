@@ -294,7 +294,10 @@ export default function DeckArea() {
           // between pages). The 8px top padding also read as a dark gap above
           // the column in the terminal preset. Desktop keeps the floating-card
           // padding (md:px-2 / md:pt-2).
-          'flex h-full gap-3 overflow-x-auto px-0 pb-2 pt-0 md:px-2 md:pt-2 max-md:snap-x max-md:snap-mandatory',
+          // overscroll-x-contain stops a left-edge swipe past the first column
+          // from chaining into Safari's history back-gesture (which navigated
+          // away from the SPA and flashed a white page).
+          'flex h-full gap-3 overflow-x-auto overscroll-x-contain px-0 pb-2 pt-0 md:px-2 md:pt-2 max-md:snap-x max-md:snap-mandatory',
           deckLeadingGutter && 'md:ps-32'
         )}
       >

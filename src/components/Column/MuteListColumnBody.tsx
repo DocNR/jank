@@ -23,7 +23,10 @@ export default function MuteListColumnBody() {
   return (
     <>
       <Tabs tabs={TABS} value={tab} onTabChange={setTab} />
-      <div className="space-y-6 px-4 pb-4 pt-2">
+      {/* Extra bottom padding on mobile so the last section (Muted words)
+          clears the fixed bottom bar + page-dot pager, which overlay the
+          column. Desktop keeps the tight pb-4. */}
+      <div className="space-y-6 px-4 pt-2 pb-4 max-md:pb-[calc(6rem+env(safe-area-inset-bottom))]">
         {showUsers && <UsersSection />}
         {showThreads && <ThreadsSection />}
         {showWords && <WordsSection />}

@@ -132,7 +132,9 @@
 
   body,
   html {
-    overscroll-behavior-y: none;
+    /* Both axes: -y stops vertical pull-to-refresh / rubber-band, -x stops the
+       page-level edge swipe from triggering Safari back/forward navigation. */
+    overscroll-behavior: none;
   }
 
   button:not([disabled]),
