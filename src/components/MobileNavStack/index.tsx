@@ -155,48 +155,66 @@ export default function MobileNavStack() {
     return r
   }
 
+  const renderLayer = (
+    entry: { id: string; url: string },
+    idx: number,
+    isTop: boolean
+  ) => {
+    const r = getRefs(entry.id)
+    const element = buildElement(entry.url, idx, r.page)
+    return (
+      <div
+        key={entry.id}
+        ref={r.scroll}
+        onTouchStart={isTop ? onTouchStart : undefined}
+        onTouchMove={isTop ? onTouchMove : undefined}
+        onTouchEnd={isTop ? onTouchEnd : undefined}
+        className="bg-background animate-mobile-screen-in fixed inset-x-0 top-0 z-40 overflow-y-auto [&_.sticky]:!top-0"
+        style={{
+          paddingTop: 'env(safe-area-inset-top)',
+          // Stop above the BottomBar so Overview stays reachable as the
+          // one-tap escape back to the deck.
+          bottom: 'calc(3rem + env(safe-area-inset-bottom))',
+          // Only the top layer carries the swipe/close offset; lower layers sit
+          // static beneath it and are simply revealed.
+          ...(isTop
+            ? {
+                transform: `translateX(${dragX}px)`,
+                transition: dragging
+                  ? 'none'
+                  : 'transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)'
+              }
+            : null)
+        }}
+      >
+        <ScrollContainerProvider scrollRef={r.scroll}>
+          {element ?? (
+            <div className="text-muted-foreground p-4 text-sm">
+              {t('Cannot display this content')}
+            </div>
+          )}
+        </ScrollContainerProvider>
+      </div>
+    )
+  }
+
   return (
     <SecondaryPageContext.Provider value={value}>
       <MutedThreadRevealProvider>
-        {stack.map((entry, idx) => {
-          const r = getRefs(entry.id)
-          const element = buildElement(entry.url, idx, r.page)
-          const isTop = idx === currentIndex
-          return (
-            <div
-              key={entry.id}
-              ref={r.scroll}
-              onTouchStart={isTop ? onTouchStart : undefined}
-              onTouchMove={isTop ? onTouchMove : undefined}
-              onTouchEnd={isTop ? onTouchEnd : undefined}
-              className="bg-background animate-mobile-screen-in fixed inset-x-0 top-0 z-40 overflow-y-auto [&_.sticky]:!top-0"
-              style={{
-                paddingTop: 'env(safe-area-inset-top)',
-                // Stop above the BottomBar so Overview stays reachable as the
-                // one-tap escape back to the deck.
-                bottom: 'calc(3rem + env(safe-area-inset-bottom))',
-                // Only the top layer carries the swipe/close offset; lower
-                // layers sit static beneath it and are simply revealed.
-                ...(isTop
-                  ? {
-                      transform: `translateX(${dragX}px)`,
-                      transition: dragging
-                        ? 'none'
-                        : 'transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)'
-                    }
-                  : null)
-              }}
-            >
-              <ScrollContainerProvider scrollRef={r.scroll}>
-                {element ?? (
-                  <div className="text-muted-foreground p-4 text-sm">
-                    {t('Cannot display this content')}
-                  </div>
-                )}
-              </ScrollContainerProvider>
-            </div>
-          )
-        })}
+        {/* Opaque backdrop hides the deck while any screen is open, so a
+            swipe-back reveals a clean surface instead of the feed you came from
+            (which often contains the very note you opened — that's what read as
+            a doubled/second screen behind). The deck reappears once the last
+            screen is fully popped. */}
+        <div
+          aria-hidden
+          className="bg-background fixed inset-x-0 top-0 z-40"
+          style={{ bottom: 'calc(3rem + env(safe-area-inset-bottom))' }}
+        />
+        {/* Lower layers: static opaque screens beneath the top one. */}
+        {stack.slice(0, currentIndex).map((entry, idx) => renderLayer(entry, idx, false))}
+        {/* Top layer: draggable, slides over the layer/backdrop beneath it. */}
+        {renderLayer(stack[currentIndex], currentIndex, true)}
       </MutedThreadRevealProvider>
     </SecondaryPageContext.Provider>
   )
