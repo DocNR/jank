@@ -21,7 +21,12 @@ async function _verifyNip05(nip05: string, pubkey: string): Promise<TVerifyNip05
   if (!nip05Name || !nip05Domain || !pubkey) return result
 
   try {
-    const res = await fetch(getWellKnownNip05Url(nip05Domain, nip05Name))
+    // NIP-05 well-known is public — omit credentials so a domain that answers
+    // with 401 + WWW-Authenticate: Basic (e.g. a parked host) can't make the
+    // browser pop its native sign-in sheet over the app while scrolling.
+    const res = await fetch(getWellKnownNip05Url(nip05Domain, nip05Name), {
+      credentials: 'omit'
+    })
     const json = await res.json()
     if (json.names?.[nip05Name] === pubkey) {
       return { ...result, isVerified: true }
@@ -51,7 +56,7 @@ export function getWellKnownNip05Url(domain: string, name?: string): string {
 
 export async function fetchPubkeysFromDomain(domain: string): Promise<string[]> {
   try {
-    const res = await fetch(getWellKnownNip05Url(domain))
+    const res = await fetch(getWellKnownNip05Url(domain), { credentials: 'omit' })
     const json = await res.json()
     const pubkeySet = new Set<string>()
     return Object.values(json.names || {}).filter((pubkey) => {
