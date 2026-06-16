@@ -340,6 +340,26 @@
 }
 
 /*
+  iOS Safari zooms the page in whenever a focused <input>/<textarea>/<select>
+  has a font-size below 16px, and never cleanly zooms back out. Several inline
+  inputs (hashtag/search pickers, the search column, message compose) use
+  Tailwind's text-sm (14px). Floor every text form control at 16px on mobile so
+  focusing one never triggers the zoom. Unlayered so it wins over Tailwind's
+  utility layer without !important (native cascade layers: unlayered > any
+  layer); gated to the mobile breakpoint so desktop keeps the smaller md: sizes.
+  Non-text input types (no keyboard, no zoom) are excluded.
+*/
+@media (max-width: 768px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not(
+      [type='color']
+    ):not([type='file']),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/*
   Custom utility-like classes kept outside @layer base so they win over
   Tailwind utilities in v4 (native CSS cascade layers: unlayered > any layer).
 */
