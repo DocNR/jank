@@ -58,7 +58,7 @@ export default function FeedButton({
       </PopoverTrigger>
       <PopoverContent sideOffset={0} side="bottom" className="w-[400px] overflow-hidden p-0">
         <div
-          className="max-h-[calc(100vh-16rem)] overflow-y-auto overscroll-contain px-4 py-3"
+          className="max-h-[calc(100dvh-16rem)] overflow-y-auto overscroll-contain px-4 py-3"
           onWheel={(e) => e.stopPropagation()}
           onTouchMove={(e) => e.stopPropagation()}
         >

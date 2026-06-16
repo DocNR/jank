@@ -325,8 +325,17 @@
 }
 @media (max-width: 768px) {
   :root {
-    --deck-col-width: calc(100vw - 1rem);
-    --deck-placeholder-width: calc(100vw - 1rem);
+    /* Subtract the horizontal safe-area insets so a column never exceeds the
+       *visible* viewport. Plain 100vw ignores the notch/Dynamic-Island insets
+       in landscape on iOS Safari, which pushed columns wider than the screen
+       and cropped their trailing edge. Insets are 0 in portrait / on desktop,
+       so this is a no-op there. */
+    --deck-col-width: calc(
+      100vw - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right)
+    );
+    --deck-placeholder-width: calc(
+      100vw - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right)
+    );
   }
 }
 
