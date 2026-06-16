@@ -358,6 +358,20 @@
   }
 }
 
+/* Mobile push-screen slide-in (native drill-down). LTR only for now; RTL
+   polish (slide from the start edge) is a follow-up. */
+@keyframes mobile-screen-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.animate-mobile-screen-in {
+  animation: mobile-screen-in 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 /*
   Custom utility-like classes kept outside @layer base so they win over
   Tailwind utilities in v4 (native CSS cascade layers: unlayered > any layer).

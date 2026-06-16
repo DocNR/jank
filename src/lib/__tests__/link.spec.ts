@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
 import {
+  normalizeToSecondaryRoute,
+  opensAsColumnOnMobile,
   parseHashtagRoute,
   parseProfileRoute,
   parseRelayRoute,
@@ -288,6 +290,36 @@ describe('routeOpensOwnColumn — Detail-column replace-mode delegation policy',
 
     it('returns false for an /external-content page', () => {
       expect(routeOpensOwnColumn('/external-content?id=abc')).toBe(false)
+    })
+  })
+
+  describe('opensAsColumnOnMobile', () => {
+    it('keeps feed-shaped standing surfaces as columns', () => {
+      expect(opensAsColumnOnMobile(toHashtag('bitcoin'))).toBe(true)
+      expect(opensAsColumnOnMobile(toRelay('wss://nos.lol'))).toBe(true)
+      expect(opensAsColumnOnMobile('/search?q=nostr')).toBe(true)
+      expect(opensAsColumnOnMobile('/notifications')).toBe(true)
+      expect(opensAsColumnOnMobile('/bookmarks')).toBe(true)
+      expect(opensAsColumnOnMobile('/mutes')).toBe(true)
+    })
+
+    it('routes drill-downs (note threads, profiles, settings) to screens', () => {
+      expect(opensAsColumnOnMobile('/notes/note1abc')).toBe(false)
+      expect(opensAsColumnOnMobile(`/p/${NPUB}`)).toBe(false)
+      expect(opensAsColumnOnMobile(`/users/${NPUB}`)).toBe(false)
+      expect(opensAsColumnOnMobile('/settings')).toBe(false)
+      expect(opensAsColumnOnMobile(`/users/${NPUB}/following`)).toBe(false)
+    })
+  })
+
+  describe('normalizeToSecondaryRoute', () => {
+    it('rewrites canonical /p/<id> to the /users/<id> page route', () => {
+      expect(normalizeToSecondaryRoute(`/p/${NPUB}`)).toBe(`/users/${NPUB}`)
+    })
+
+    it('leaves other routes untouched', () => {
+      expect(normalizeToSecondaryRoute('/notes/note1abc')).toBe('/notes/note1abc')
+      expect(normalizeToSecondaryRoute('/settings')).toBe('/settings')
     })
   })
 })
