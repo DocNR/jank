@@ -309,7 +309,11 @@ export default function DeckArea() {
         ref={scrollerRef}
         data-deck-scroll=""
         className={cn(
-          'flex h-full gap-3 overflow-x-auto p-2 max-md:snap-x max-md:snap-mandatory',
+          // pt-0 on mobile so columns sit flush under the top toolbar — the
+          // 8px top padding reads as a dark gap above the column in the
+          // terminal preset (deck surface is darker than the card). Desktop
+          // keeps the floating-card top margin (md:pt-2).
+          'flex h-full gap-3 overflow-x-auto px-2 pb-2 pt-0 md:pt-2 max-md:snap-x max-md:snap-mandatory',
           deckLeadingGutter && 'md:ps-32'
         )}
       >
