@@ -15,6 +15,13 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.14.2',
+    date: '2026-06-15',
+    highlights: [
+      'Deleting a deck now sticks across your devices. A deck you remove on one device no longer reappears on another after it syncs, and the brief Undo still brings it back if you change your mind.'
+    ]
+  },
+  {
     version: '26.14.1',
     date: '2026-06-14',
     highlights: [

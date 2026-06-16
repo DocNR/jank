@@ -10,50 +10,103 @@ function deckDirty(deck: TDeck): boolean {
 export type TMergeResult = {
   /** The merged workspace to write to storage (safe parts applied). */
   merged: TAccountWorkspace
-  /** Local decks kept because they had unsaved edits while the remote also changed — need explicit approval. */
+  /** Local decks kept despite a remote tombstone or a conflicting remote change (unsaved local edits) — need explicit approval. */
   conflicts: TDeck[]
 }
 
+/** Tombstones older than this are garbage-collected on merge. 90 days: long
+ *  enough that a device offline for months won't resurrect a deleted deck,
+ *  cheap enough (each entry ~50 bytes) that growth is a non-issue. */
+export const DECK_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000
+
+/** Union two tombstone maps, keeping the latest deletion timestamp per id. */
+function unionTombstones(
+  a: Record<string, number> | undefined,
+  b: Record<string, number> | undefined
+): Record<string, number> {
+  const out: Record<string, number> = { ...(a ?? {}) }
+  for (const [id, ts] of Object.entries(b ?? {})) {
+    if (out[id] === undefined || ts > out[id]) out[id] = ts
+  }
+  return out
+}
+
 /**
- * Per-deck merge of a remote workspace into the local workspace (pull side). Non-destructive:
+ * Per-deck merge of a remote workspace into the local workspace (pull side).
  *
- * - remote deck **not present** locally → **add** it
- * - local deck with **unsaved edits** (dirty) → **keep local**, report as a conflict
- * - local deck clean, remote's `lastSavedAt` **newer** → **update** to remote (per-deck LWW)
- * - local deck clean, local **newer/equal** → **keep local** (don't downgrade)
- * - **local-only** deck (absent from remote) → **keep** (delete-propagation is a separate backlog item)
+ * Decks: remote-not-local → add; locally-dirty → keep + conflict; clean with
+ * newer remote → take remote (per-deck LWW); else keep local; local-only → keep.
  *
- * `activeDeckId`: keep local's if its deck survives, else remote's, else the first merged deck.
+ * Tombstones (`deletedDecks`): unioned across both sides (max timestamp per id).
+ * A candidate deck whose id is tombstoned is DROPPED unless it was saved after
+ * the delete (`lastSavedAt > deletedAt`, LWW resurrection) or has unsaved local
+ * edits (kept + reported as a conflict). A deck that survives its tombstone
+ * clears it. Tombstones older than `DECK_TOMBSTONE_TTL_MS` are GC'd. If the
+ * result would be empty, the newest candidate is kept regardless (never strand
+ * the user deckless). `now` is injectable for deterministic GC tests.
+ *
+ * `activeDeckId`: keep local's if its deck survives, else remote's, else first.
  * A `null`/absent local workspace means "fresh device" → take remote wholesale.
  */
 export function mergeRemoteWorkspace(
   local: TAccountWorkspace | undefined,
-  remote: TAccountWorkspace
+  remote: TAccountWorkspace,
+  now: number = Date.now()
 ): TMergeResult {
   if (!local) return { merged: remote, conflicts: [] }
 
   const localById = new Map(local.decks.map((d) => [d.id, d]))
   const seen = new Set<string>()
   const conflicts: TDeck[] = []
-  const mergedDecks: TDeck[] = []
+  const candidateDecks: TDeck[] = []
 
   for (const rd of remote.decks) {
     seen.add(rd.id)
     const ld = localById.get(rd.id)
     if (!ld) {
-      mergedDecks.push(rd) // new on another device
+      candidateDecks.push(rd) // new on another device
     } else if (deckDirty(ld)) {
-      mergedDecks.push(ld) // unsaved local edits win
+      candidateDecks.push(ld) // unsaved local edits win
       conflicts.push(ld)
     } else if (rd.lastSavedAt > ld.lastSavedAt) {
-      mergedDecks.push(rd) // remote is newer
+      candidateDecks.push(rd) // remote is newer
     } else {
-      mergedDecks.push(ld) // local newer or equal
+      candidateDecks.push(ld) // local newer or equal
     }
   }
-
   for (const ld of local.decks) {
-    if (!seen.has(ld.id)) mergedDecks.push(ld) // local-only → keep (no delete propagation)
+    if (!seen.has(ld.id)) candidateDecks.push(ld) // local-only
+  }
+
+  // Apply tombstones (LWW, with a dirty exception). Survivors clear their tombstone.
+  const tombstones = unionTombstones(local.deletedDecks, remote.deletedDecks)
+  const survivors: TDeck[] = []
+  for (const d of candidateDecks) {
+    const ts = tombstones[d.id]
+    if (ts === undefined) {
+      survivors.push(d)
+    } else if (d.lastSavedAt > ts) {
+      survivors.push(d)
+      delete tombstones[d.id] // saved after delete → resurrect
+    } else if (deckDirty(d)) {
+      survivors.push(d)
+      delete tombstones[d.id] // unsaved edits → keep, surface as conflict
+      if (!conflicts.includes(d)) conflicts.push(d)
+    }
+    // else: dropped (stays deleted)
+  }
+
+  // Never strand the user with zero decks.
+  let mergedDecks = survivors
+  if (mergedDecks.length === 0 && candidateDecks.length > 0) {
+    const newest = candidateDecks.reduce((a, b) => (b.lastSavedAt > a.lastSavedAt ? b : a))
+    mergedDecks = [newest]
+    delete tombstones[newest.id]
+  }
+
+  // GC aged tombstones.
+  for (const [id, ts] of Object.entries(tombstones)) {
+    if (ts < now - DECK_TOMBSTONE_TTL_MS) delete tombstones[id]
   }
 
   const ids = new Set(mergedDecks.map((d) => d.id))
@@ -65,16 +118,16 @@ export function mergeRemoteWorkspace(
   }
 
   const mergedPairedAgents = mergePairedAgents(local.pairedAgents, remote.pairedAgents)
-  // allowSiblingExposure: remote indicates a recent edit by another device — if
-  // the user toggled on the other device, that's authoritative.
   const allowSiblingExposure = remote.allowSiblingExposure ?? local.allowSiblingExposure
+  const hasTombstones = Object.keys(tombstones).length > 0
 
   return {
     merged: {
       activeDeckId,
       decks: mergedDecks,
       ...(mergedPairedAgents.length > 0 ? { pairedAgents: mergedPairedAgents } : {}),
-      ...(allowSiblingExposure !== undefined ? { allowSiblingExposure } : {})
+      ...(allowSiblingExposure !== undefined ? { allowSiblingExposure } : {}),
+      ...(hasTombstones ? { deletedDecks: tombstones } : {})
     },
     conflicts
   }
