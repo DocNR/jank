@@ -91,7 +91,12 @@ class RelayInfoService {
   private async fetchRelayNip11(url: string) {
     try {
       const res = await fetch(url.replace('ws://', 'http://').replace('wss://', 'https://'), {
-        headers: { Accept: 'application/nostr+json' }
+        headers: { Accept: 'application/nostr+json' },
+        // NIP-11 is public — never send credentials, and `omit` keeps WebKit
+        // from engaging an HTTP auth challenge. Without this, a relay that
+        // 401s with `WWW-Authenticate: Basic` (e.g. a defunct/parked host)
+        // makes Safari pop its native username/password sheet over the app.
+        credentials: 'omit'
       })
       return res.json() as Omit<TRelayInfo, 'url' | 'shortUrl'>
     } catch {
