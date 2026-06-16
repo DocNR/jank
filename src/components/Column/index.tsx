@@ -232,7 +232,10 @@ export function Column({ column, dragHandleProps, style }: Props) {
         if (!isActive) setActiveColumnId(column.id)
       }}
       className={cn(
-        'border-border bg-card flex h-full shrink-0 flex-col overflow-hidden rounded-lg border shadow-md transition-[box-shadow,border-color] duration-200',
+        // Mobile: edge-to-edge, no card frame (one column fills the screen, so
+        // the border/rounding/shadow that separate side-by-side columns are
+        // wasted chrome). Desktop keeps the floating-card frame.
+        'border-border bg-card flex h-full shrink-0 flex-col overflow-hidden transition-[box-shadow,border-color] duration-200 md:rounded-lg md:border md:shadow-md',
         // Sticky-selection affordance: recolor the existing 1px border to
         // the account hue (so the top stripe + side border read as one
         // continuous frame, no second outline) and pump the layered
