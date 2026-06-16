@@ -15,6 +15,15 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.15.0',
+    date: '2026-06-16',
+    highlights: [
+      'Mobile got a big usability pass. Tapping a note or profile now opens it as a screen that slides in and can be swiped back, instead of piling up columns. Columns run edge-to-edge, and a new overview — the grid button in the bottom bar — shows all your open columns at a glance so you can jump between or close them (also available on desktop).',
+      'The mobile bottom bar is clearer, with separate buttons for the column overview, adding a column, and composing a note. The active deck and deck switcher now appear in the top bar on mobile too.',
+      'A batch of iOS fixes: the layout no longer crops oddly, focusing a text field no longer leaves the page stuck zoomed in, columns sit flush under the toolbar, and a stray browser sign-in popup triggered by some relays and profiles is gone.'
+    ]
+  },
+  {
     version: '26.14.2',
     date: '2026-06-15',
     highlights: [

@@ -1097,6 +1097,8 @@ export default {
     'Only you can see this mute. Click to make it public.':
       'Only you can see this mute. Click to make it public.',
     'Anyone can see this mute. Click to make it private.':
-      'Anyone can see this mute. Click to make it private.'
+      'Anyone can see this mute. Click to make it private.',
+    'Show all columns': 'Show all columns',
+    'Jump to column': 'Jump to column'
   }
 }

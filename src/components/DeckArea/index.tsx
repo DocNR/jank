@@ -22,6 +22,7 @@ import { useUserPreferences } from '@/providers/UserPreferencesProvider'
 import { useAtom } from 'jotai'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import AddColumnModal from '@/components/AddColumnModal'
+import ColumnOverview from '@/components/ColumnOverview'
 import AddColumnPlaceholder from './AddColumnPlaceholder'
 import ColumnPageIndicator from './ColumnPageIndicator'
 import EmptyDeckCTA from './EmptyDeckCTA'
@@ -48,16 +49,13 @@ export default function DeckArea() {
   const { isSmallScreen } = useScreenSize()
   const scrollerRef = useRef<HTMLDivElement>(null)
   const prevColumnsRef = useRef(columns)
-  // Refs for the mobile scroll-settle listener so the effect doesn't re-attach
-  // every time `activeColumnId` or `columns` flip — both can change rapidly.
+  // Ref mirror of activeColumnId so the mobile IntersectionObserver callback
+  // can compare against the current value without re-attaching the observer
+  // every time the active column flips.
   const activeColumnIdRef = useRef(activeColumnId)
-  const columnsRef = useRef(columns)
   useEffect(() => {
     activeColumnIdRef.current = activeColumnId
   }, [activeColumnId])
-  useEffect(() => {
-    columnsRef.current = columns
-  }, [columns])
 
   // Centralized "scroll this column into view" helper. Uses the data-column-id
   // attribute already set by SortableColumn. No-op if the node can't be found
@@ -198,67 +196,50 @@ export default function DeckArea() {
     }
   }, [columns, activeColumnId, setActiveColumnId, focusBeamActive, setFocusBeamActive, scrollColumnIntoView])
 
-  // WS3: mobile scroll-settle → setActiveColumnId. Watches horizontal scroll
-  // on the deck scroller, finds the closest snapped column, and updates the
-  // active id. NEVER calls scrollColumnIntoView from this handler — that
-  // would create a feedback loop (scroll → set active → scroll → ...).
-  // Debounced via rAF + setTimeout so we only fire on settle, not mid-swipe.
+  // WS3: mobile active-column tracking → setActiveColumnId, via an
+  // IntersectionObserver on the deck scroller. We previously debounced
+  // `scroll`/`scrollend`, but `scrollend` only shipped in Safari 18.2 and iOS
+  // momentum scrolling throttles `scroll`, so the page-dot indicator got stuck
+  // on the old column after a swipe. The IO reports each column wrapper's
+  // visible ratio as the user pans; the most-visible column (≥50%) wins and
+  // becomes active, so the dots update live. Re-observes when the column set
+  // changes. NEVER calls scrollColumnIntoView from here — that would feed back
+  // into the scroll position.
   useEffect(() => {
     if (!isSmallScreen) return
     const scroller = scrollerRef.current
     if (!scroller) return
 
-    let timer: number | null = null
-    let rafId: number | null = null
-    const onSettle = () => {
-      const cols = columnsRef.current
-      if (!cols.length) return
-      const scrollLeft = scroller.scrollLeft
-      // Pick the column whose left edge is closest to the current scroll
-      // position. The SortableColumn wrappers are *direct children* of the
-      // scroller — we walk `scroller.children` to avoid matching the inner
-      // <Column> (which ALSO carries `data-column-id` for the active-click
-      // capture). `getBoundingClientRect` gives absolute layout positions;
-      // subtracting the scroller's own left + adding scrollLeft yields each
-      // wrapper's offset within the scrollable content.
-      const scrollerLeft = scroller.getBoundingClientRect().left
-      let bestId: string | null = null
-      let bestDist = Infinity
-      for (const child of Array.from(scroller.children) as HTMLElement[]) {
-        const id = child.dataset.columnId
-        if (!id) continue // AddColumnPlaceholder etc. have no id
-        const childLeftInContent =
-          child.getBoundingClientRect().left - scrollerLeft + scrollLeft
-        const dist = Math.abs(childLeftInContent - scrollLeft)
-        if (dist < bestDist) {
-          bestDist = dist
-          bestId = id
+    const ratios = new Map<string, number>()
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset.columnId
+          if (id) ratios.set(id, entry.intersectionRatio)
         }
-      }
-      if (bestId && bestId !== activeColumnIdRef.current) {
-        setActiveColumnId(bestId)
-      }
+        let bestId: string | null = null
+        let bestRatio = 0
+        for (const [id, ratio] of ratios) {
+          if (ratio > bestRatio) {
+            bestRatio = ratio
+            bestId = id
+          }
+        }
+        // Require a clear majority so we flip exactly once per swipe (near the
+        // midpoint) rather than flickering between two half-visible columns.
+        if (bestId && bestRatio >= 0.5 && bestId !== activeColumnIdRef.current) {
+          setActiveColumnId(bestId)
+        }
+      },
+      { root: scroller, threshold: [0, 0.25, 0.5, 0.75, 1] }
+    )
+    // Observe the SortableColumn wrappers (direct children carrying
+    // data-column-id). The AddColumnPlaceholder has no id and is skipped.
+    for (const child of Array.from(scroller.children) as HTMLElement[]) {
+      if (child.dataset.columnId) observer.observe(child)
     }
-    const onScroll = () => {
-      if (timer) clearTimeout(timer)
-      if (rafId) cancelAnimationFrame(rafId)
-      rafId = requestAnimationFrame(() => {
-        timer = window.setTimeout(onSettle, 120)
-      })
-    }
-    scroller.addEventListener('scroll', onScroll, { passive: true })
-    // 'scrollend' is iOS 16+ / modern Chrome — preferred when available
-    // because it fires exactly once per settle. The rAF+timeout fallback
-    // above still runs but is harmless (it idempotently re-confirms the
-    // current snapped column).
-    scroller.addEventListener('scrollend', onSettle, { passive: true })
-    return () => {
-      scroller.removeEventListener('scroll', onScroll)
-      scroller.removeEventListener('scrollend', onSettle)
-      if (timer) clearTimeout(timer)
-      if (rafId) cancelAnimationFrame(rafId)
-    }
-  }, [isSmallScreen, setActiveColumnId])
+    return () => observer.disconnect()
+  }, [isSmallScreen, setActiveColumnId, columns.length])
 
   // Cross-provider focus/scroll request channel. ColumnsProvider sets
   // `focusedColumnRequestAtom` on re-click of an already-open transient
@@ -309,7 +290,15 @@ export default function DeckArea() {
         ref={scrollerRef}
         data-deck-scroll=""
         className={cn(
-          'flex h-full gap-3 overflow-x-auto p-2 max-md:snap-x max-md:snap-mandatory',
+          // Mobile is edge-to-edge: no side/top padding so each full-viewport
+          // column bleeds to the screen edges (gap-3 is just the swipe gutter
+          // between pages). The 8px top padding also read as a dark gap above
+          // the column in the terminal preset. Desktop keeps the floating-card
+          // padding (md:px-2 / md:pt-2).
+          // overscroll-x-contain stops a left-edge swipe past the first column
+          // from chaining into Safari's history back-gesture (which navigated
+          // away from the SPA and flashed a white page).
+          'flex h-full gap-3 overflow-x-auto overscroll-x-contain px-0 pb-2 pt-0 md:px-2 md:pt-2 max-md:snap-x max-md:snap-mandatory',
           deckLeadingGutter && 'md:ps-32'
         )}
       >
@@ -337,11 +326,6 @@ export default function DeckArea() {
             setActiveColumnId(id)
             scrollColumnIntoView(id)
           }}
-          onJumpToAddPlaceholder={() => {
-            const scroller = scrollerRef.current
-            if (!scroller) return
-            scroller.scrollTo({ left: scroller.scrollWidth, behavior: 'instant' })
-          }}
         />
       )}
       {/* Focus Beam scrim — viewport-fixed overlay above the deck (z-40),
@@ -352,6 +336,7 @@ export default function DeckArea() {
           viewport. */}
       {scrimMounted && !isSmallScreen && <FocusBeamScrim active={focusBeamActive} />}
       <AddColumnModal open={addOpen} onOpenChange={setAddOpen} onAdd={addColumn} />
+      <ColumnOverview />
     </>
   )
 }

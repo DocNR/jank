@@ -15,15 +15,18 @@
  * here.
  */
 import { activeColumnIdAtom } from '@/atoms/active-column'
+import { mobileNavStackAtom } from '@/atoms/mobile-nav-stack'
 import AgentDrawer from '@/components/AgentDrawer'
 import CommandDispatcher from '@/components/CommandDispatcher'
 import CommandPalette from '@/components/CommandPalette'
 import StarterCommands from '@/components/CommandPalette/StarterCommands'
+import MobileNavStack from '@/components/MobileNavStack'
 import Shell from '@/components/Shell'
 import TopBar from '@/components/TopBar'
+import { opensAsColumnOnMobile } from '@/lib/link'
 import DeckHomePage from '@/pages/primary/DeckHomePage'
 import { CurrentRelaysProvider } from '@/providers/CurrentRelaysProvider'
-import { useStore } from 'jotai'
+import { useSetAtom, useStore } from 'jotai'
 import {
   createContext,
   useCallback,
@@ -71,6 +74,7 @@ export function DeckManager() {
   const { isSmallScreen } = useScreenSize()
   const { addTransientColumn, columns, removeColumn } = useColumns()
   const { account } = useNostr()
+  const setMobileStack = useSetAtom(mobileNavStackAtom)
   const ignorePopStateRef = useRef(false)
   // Read the active column id imperatively (not via useAtomValue) so this
   // value can be sampled inside the pushSecondaryPage callback without
@@ -136,6 +140,19 @@ export function DeckManager() {
         return
       }
 
+      // Mobile push-stack: back pops one screen. Re-arm a history entry so the
+      // NEXT back also fires popstate (instead of exiting the SPA).
+      const navStack = jotaiStore.get(mobileNavStackAtom)
+      if (navStack.length > 0) {
+        setMobileStack(navStack.slice(0, -1))
+        try {
+          window.history.pushState(null, '', '/')
+        } catch {
+          /* non-browser env — skip */
+        }
+        return
+      }
+
       // Back-button closes the focused transient column. There is no
       // history entry per transient column, so one back-click closes one
       // transient — no stack to navigate through. Pinned columns are
@@ -182,6 +199,20 @@ export function DeckManager() {
       url: string,
       opts?: { sourceViewContext?: string; sourceSigningIdentity?: string | null }
     ) => {
+      // Mobile: in-feed drill-downs (note threads, profiles, settings, ...)
+      // become native pushed screens. Only feed-shaped standing surfaces
+      // (hashtag/relay/search/notifications/bookmarks/mutes) still spawn deck
+      // columns. Desktop is unchanged — everything spawns a transient column.
+      if (isSmallScreen && !opensAsColumnOnMobile(url)) {
+        setMobileStack((prev) => [...prev, { id: crypto.randomUUID(), url }])
+        // Arm a history entry so hardware/gesture back pops the screen.
+        try {
+          window.history.pushState(null, '', '/')
+        } catch {
+          /* non-browser env — skip */
+        }
+        return
+      }
       const parentColumnId = jotaiStore.get(activeColumnIdAtom) ?? undefined
       const source = opts?.sourceViewContext
         ? {
@@ -191,7 +222,7 @@ export function DeckManager() {
         : null
       addTransientColumn(url, source, parentColumnId)
     },
-    [addTransientColumn, jotaiStore]
+    [isSmallScreen, setMobileStack, addTransientColumn, jotaiStore]
   )
 
   // popSecondaryPage outside a DetailColumnBody = "close the focused
@@ -224,6 +255,7 @@ export function DeckManager() {
             content={<DeckHomePage />}
             bottomBar={isSmallScreen ? <BottomNavigationBar /> : null}
           />
+          {isSmallScreen && <MobileNavStack />}
           <TooManyRelaysAlertDialog />
           <AgentDrawer />
           <BackgroundAudio className="fixed end-0 bottom-20 z-50 w-80 overflow-hidden rounded-s-full rounded-e-none border shadow-lg" />

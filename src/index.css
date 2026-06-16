@@ -132,7 +132,9 @@
 
   body,
   html {
-    overscroll-behavior-y: none;
+    /* Both axes: -y stops vertical pull-to-refresh / rubber-band, -x stops the
+       page-level edge swipe from triggering Safari back/forward navigation. */
+    overscroll-behavior: none;
   }
 
   button:not([disabled]),
@@ -325,9 +327,49 @@
 }
 @media (max-width: 768px) {
   :root {
-    --deck-col-width: calc(100vw - 1rem);
-    --deck-placeholder-width: calc(100vw - 1rem);
+    /* Edge-to-edge on mobile: columns fill the full viewport (one column per
+       page), so there's no side padding to subtract — only the horizontal
+       safe-area insets, so a column never sits under the notch in landscape.
+       Insets are 0 in portrait / on desktop. */
+    --deck-col-width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right));
+    --deck-placeholder-width: calc(
+      100vw - env(safe-area-inset-left) - env(safe-area-inset-right)
+    );
   }
+}
+
+/*
+  iOS Safari zooms the page in whenever a focused <input>/<textarea>/<select>
+  has a font-size below 16px, and never cleanly zooms back out. Several inline
+  inputs (hashtag/search pickers, the search column, message compose) use
+  Tailwind's text-sm (14px). Floor every text form control at 16px on mobile so
+  focusing one never triggers the zoom. Unlayered so it wins over Tailwind's
+  utility layer without !important (native cascade layers: unlayered > any
+  layer); gated to the mobile breakpoint so desktop keeps the smaller md: sizes.
+  Non-text input types (no keyboard, no zoom) are excluded.
+*/
+@media (max-width: 768px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not(
+      [type='color']
+    ):not([type='file']),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Mobile push-screen slide-in (native drill-down). LTR only for now; RTL
+   polish (slide from the start edge) is a follow-up. */
+@keyframes mobile-screen-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.animate-mobile-screen-in {
+  animation: mobile-screen-in 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /*
