@@ -11,7 +11,6 @@ import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortabl
 import {
   activeColumnIdAtom,
   addColumnDialogOpenAtom,
-  columnOverviewOpenAtom,
   focusBeamActiveAtom,
   focusedColumnRequestAtom
 } from '@/atoms/active-column'
@@ -20,7 +19,7 @@ import { useColumns } from '@/providers/ColumnsProvider'
 import { useNostr } from '@/providers/NostrProvider'
 import { useScreenSize } from '@/providers/ScreenSizeProvider'
 import { useUserPreferences } from '@/providers/UserPreferencesProvider'
-import { useAtom, useSetAtom } from 'jotai'
+import { useAtom } from 'jotai'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import AddColumnModal from '@/components/AddColumnModal'
 import ColumnOverview from '@/components/ColumnOverview'
@@ -47,7 +46,6 @@ export default function DeckArea() {
   const [addOpen, setAddOpen] = useAtom(addColumnDialogOpenAtom)
   const [focusBeamActive, setFocusBeamActive] = useAtom(focusBeamActiveAtom)
   const [focusedRequest, setFocusedRequest] = useAtom(focusedColumnRequestAtom)
-  const setOverviewOpen = useSetAtom(columnOverviewOpenAtom)
   const { isSmallScreen } = useScreenSize()
   const scrollerRef = useRef<HTMLDivElement>(null)
   const prevColumnsRef = useRef(columns)
@@ -328,12 +326,6 @@ export default function DeckArea() {
             setActiveColumnId(id)
             scrollColumnIntoView(id)
           }}
-          onJumpToAddPlaceholder={() => {
-            const scroller = scrollerRef.current
-            if (!scroller) return
-            scroller.scrollTo({ left: scroller.scrollWidth, behavior: 'instant' })
-          }}
-          onOpenOverview={() => setOverviewOpen(true)}
         />
       )}
       {/* Focus Beam scrim — viewport-fixed overlay above the deck (z-40),

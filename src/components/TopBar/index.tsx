@@ -1,8 +1,8 @@
 /**
  * TopBar — single chrome region for the app shell.
  *
- * Mobile: brand · DeckSwitcher · spacer · AgentChat · Add column · Account
- *   (BottomBar handles Home + Post; swipe + page-dot covers column nav)
+ * Mobile: brand · DeckSwitcher · spacer · AgentChat · Account
+ *   (BottomBar handles Overview + New column + Compose; page-dots cover nav)
  * Desktop: brand · QuickJumps (5 icons) · spacer · Compose · Add column · AccountButton compact
  *
  * Surfaces Settings / Wallet / account switch via the AccountButton dropdown,
@@ -76,7 +76,8 @@ export default function TopBar() {
             </Tooltip>
           )}
           <AgentChatButton />
-          <AddColumnButton />
+          {/* Mobile gets New column in the bottom bar; keep it here on desktop. */}
+          {!isSmallScreen && <AddColumnButton />}
           <AccountButton compact />
         </div>
       </div>

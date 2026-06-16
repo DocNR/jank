@@ -2,22 +2,19 @@
 import { cn } from '@/lib/utils'
 import { pubkeyToHsl } from '@/lib/pubkey'
 import { TColumn } from '@/types/column'
-import { LayoutGrid, Plus } from 'lucide-react'
 
 type Props = {
   columns: TColumn[]
   activeColumnId: string | null
   onJumpToColumn: (id: string) => void
-  onJumpToAddPlaceholder: () => void
-  /** Open the column overview ("exploding tabs") overlay. */
-  onOpenOverview: () => void
 }
 
 /**
  * WS3 — bottom-anchored page-dot indicator for the swipe-snap deck on mobile.
- * One dot per column plus a trailing `+` slot for the add-column placeholder
- * page. The active dot tints to the column's account hue so the indicator
- * doubles as a "whose perspective am I on?" reference at a glance.
+ * One dot per column; tap a dot to jump to it. The active dot tints to the
+ * column's account hue so the indicator doubles as a "whose perspective am I
+ * on?" reference at a glance. Overview / add-column / compose live in the
+ * bottom bar, not here.
  *
  * Positioned above the BottomBar. The bar is a 3rem (h-12) button row plus
  * `env(safe-area-inset-bottom)` (the home-indicator inset), so the pager has
@@ -31,9 +28,7 @@ type Props = {
 export default function ColumnPageIndicator({
   columns,
   activeColumnId,
-  onJumpToColumn,
-  onJumpToAddPlaceholder,
-  onOpenOverview
+  onJumpToColumn
 }: Props) {
   return (
     <div
@@ -45,14 +40,6 @@ export default function ColumnPageIndicator({
         className="bg-card/95 border-border pointer-events-auto flex items-center gap-0.5 rounded-full border px-2 py-1 shadow-md"
         role="tablist"
       >
-        <button
-          type="button"
-          aria-label="Show all columns"
-          onClick={onOpenOverview}
-          className="text-muted-foreground hover:text-foreground me-0.5 flex h-7 w-7 items-center justify-center"
-        >
-          <LayoutGrid className="size-3.5" />
-        </button>
         {columns.map((c) => {
           const isActive = c.id === activeColumnId
           const hue = pubkeyToHsl(c.viewContext)
@@ -76,15 +63,6 @@ export default function ColumnPageIndicator({
             </button>
           )
         })}
-        <button
-          type="button"
-          role="tab"
-          aria-label="Jump to add column"
-          onClick={onJumpToAddPlaceholder}
-          className="text-muted-foreground hover:text-foreground flex h-7 w-7 items-center justify-center"
-        >
-          <Plus className="size-3.5" />
-        </button>
       </div>
     </div>
   )
