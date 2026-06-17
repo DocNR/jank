@@ -15,6 +15,14 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.15.1',
+    date: '2026-06-16',
+    highlights: [
+      'Replying is no longer interrupted by a busy feed. When new notes arrive while you are writing a reply, the compose box stays open instead of occasionally closing on you; the new notes wait in the "show new notes" pill until you are done.',
+      'Fixed the "Show more" button on long notes showing up with hard-to-read, low-contrast text in light mode.'
+    ]
+  },
+  {
     version: '26.15.0',
     date: '2026-06-16',
     highlights: [
