@@ -15,6 +15,14 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.15.2',
+    date: '2026-06-16',
+    highlights: [
+      'The link preview shown when you share the site now matches the default terminal look (green on black) instead of the old teal card.',
+      'The name is now styled as JANK across the app, including the name shown to your remote signer when you pair a bunker.'
+    ]
+  },
+  {
     version: '26.15.1',
     date: '2026-06-16',
     highlights: [

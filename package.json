@@ -1,6 +1,6 @@
 {
   "name": "jank",
-  "version": "26.15.1",
+  "version": "26.15.2",
   "description": "A TweetDeck-style multi-column deck for Nostr — just another nostr klient",
   "type": "module",
   "author": "DocNR",
