@@ -232,7 +232,10 @@ export function Column({ column, dragHandleProps, style }: Props) {
         if (!isActive) setActiveColumnId(column.id)
       }}
       className={cn(
-        'border-border bg-card flex h-full shrink-0 flex-col overflow-hidden rounded-lg border shadow-md transition-[box-shadow,border-color] duration-200',
+        // Mobile: edge-to-edge, no card frame (one column fills the screen, so
+        // the border/rounding/shadow that separate side-by-side columns are
+        // wasted chrome). Desktop keeps the floating-card frame.
+        'border-border bg-card flex h-full shrink-0 flex-col overflow-hidden transition-[box-shadow,border-color] duration-200 md:rounded-lg md:border md:shadow-md',
         // Sticky-selection affordance: recolor the existing 1px border to
         // the account hue (so the top stripe + side border read as one
         // continuous frame, no second outline) and pump the layered
@@ -321,7 +324,12 @@ export function Column({ column, dragHandleProps, style }: Props) {
         <div
           ref={bodyRef}
           data-column-body
-          className="min-h-0 flex-1 overflow-y-auto [&_.sticky]:!top-0"
+          // Mobile bottom padding so a column's last content clears the fixed
+          // bottom bar + page-dot pager (which overlay the deck). Applies to
+          // every column body — finite content (settings, mute, profile) was
+          // getting cut off; feeds just gain a little scroll-past room. Desktop
+          // has no bottom chrome, so it's mobile-only.
+          className="min-h-0 flex-1 overflow-y-auto max-md:pb-[calc(6rem+env(safe-area-inset-bottom))] [&_.sticky]:!top-0"
         >
           <ScrollContainerProvider scrollRef={bodyRef}>
             <AccountScope

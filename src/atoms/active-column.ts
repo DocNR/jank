@@ -53,6 +53,13 @@ export const focusedColumnRequestAtom = atom<string | null>(null)
 export const focusBeamActiveAtom = atom<boolean>(false)
 
 /**
+ * Open/closed state of the column overview ("exploding tabs") overlay — a
+ * full-screen grid of every open column for jump / close / add. Opened from the
+ * mobile page-dot pill's grid button and a desktop TopBar button. Ephemeral.
+ */
+export const columnOverviewOpenAtom = atom<boolean>(false)
+
+/**
  * Open/closed state of the Track B agent chat drawer. Lifted into Jotai so the
  * TopBar toggle button and the AgentDrawer shell (mounted in DeckManager) share
  * one source of truth without prop-drilling.

@@ -1,6 +1,7 @@
 import NewNotesButton from '@/components/NewNotesButton'
 import { Button } from '@/components/ui/button'
 import { FUTURE_EVENT_TOLERANCE_SECONDS, NOTIFICATION_LIST_STYLE } from '@/constants'
+import { useAnyPostEditorOpen } from '@/hooks/useAnyPostEditorOpen'
 import { useColumnVisible } from '@/hooks/useColumnVisible'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { isInMutedThread, isMentioningMutedUsers } from '@/lib/event'
@@ -170,6 +171,13 @@ const NoteList = forwardRef<
     }, [events, newEvents])
     const showNewNotesDirectlyRef = useRef(showNewNotesDirectly)
     showNewNotesDirectlyRef.current = showNewNotesDirectly
+    // While a composer is open, the live-arrival handler must not mutate or
+    // scroll the rendered timeline (it would unmount the NoteCard row that owns
+    // an open reply dialog and close it). Read via a ref so the subscription
+    // effect's closure sees the current value without resubscribing.
+    const anyComposerOpen = useAnyPostEditorOpen()
+    const composerOpenRef = useRef(anyComposerOpen)
+    composerOpenRef.current = anyComposerOpen
     const scrollContainerRef = useScrollContainer()
 
     const pinnedEventHexIdSet = useMemo(() => {
@@ -420,6 +428,16 @@ const NoteList = forwardRef<
         )
 
         const handleNewEvents = (newEvents: Event[]) => {
+          // A composer is open somewhere: never disturb the rendered timeline.
+          // Prepending (and the scrollToTop below) re-lays out the virtual list
+          // and can unmount the row that owns an open reply dialog, closing it
+          // out from under the user. Buffer into the "new notes" pill instead;
+          // it's revealed when they finish composing. Overrides
+          // showNewNotesDirectly too — the steadiness matters more here.
+          if (composerOpenRef.current) {
+            setNewEvents((oldEvents) => mergeTimelines([newEvents, oldEvents]))
+            return
+          }
           if (showNewNotesDirectlyRef.current) {
             setEvents((oldEvents) => mergeTimelines([newEvents, oldEvents]))
           } else {

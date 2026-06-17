@@ -1,11 +1,11 @@
 import { cn } from '@/lib/utils'
-import HomeButton from './HomeButton'
+import NewColumnButton from './NewColumnButton'
+import OverviewButton from './OverviewButton'
 import PostButton from './PostButton'
 
-// WS2 shrunk the bar to Home + Post. Search/Messages/Notifications are deck
-// columns now, not primary pages, so the icons no longer have a meaningful
-// destination. The middle is reserved for the WS3 swipe page-dot indicator.
-// BackgroundAudio moved to the unified shell's floating widget mount.
+// Overview (all columns) · New column · Compose. The middle is reserved for the
+// WS3 swipe page-dot indicator. Search/Messages/Notifications are deck columns
+// now, so they don't get bottom-bar icons.
 export default function BottomNavigationBar() {
   return (
     <div
@@ -15,7 +15,8 @@ export default function BottomNavigationBar() {
       }}
     >
       <div className="flex w-full items-center justify-around [&_svg]:size-4 [&_svg]:shrink-0">
-        <HomeButton />
+        <OverviewButton />
+        <NewColumnButton />
         <PostButton />
       </div>
     </div>

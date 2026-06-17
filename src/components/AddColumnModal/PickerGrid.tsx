@@ -120,7 +120,7 @@ export default function PickerGrid({ onSelect }: Props) {
               )}
             >
               <Icon className="size-7 opacity-80" />
-              <span className="w-full px-1 text-center text-xs leading-tight font-medium">
+              <span className="w-full px-1 text-center text-xs leading-tight font-medium break-words hyphens-auto">
                 {t(desc.label)}
               </span>
               {/* Keyboard-shortcut hint in the bottom-end corner. Muted +

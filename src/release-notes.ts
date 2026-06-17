@@ -15,6 +15,37 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.15.1',
+    date: '2026-06-16',
+    highlights: [
+      'Replying is no longer interrupted by a busy feed. When new notes arrive while you are writing a reply, the compose box stays open instead of occasionally closing on you; the new notes wait in the "show new notes" pill until you are done.',
+      'Fixed the "Show more" button on long notes showing up with hard-to-read, low-contrast text in light mode.'
+    ]
+  },
+  {
+    version: '26.15.0',
+    date: '2026-06-16',
+    highlights: [
+      'Mobile got a big usability pass. Tapping a note or profile now opens it as a screen that slides in and can be swiped back, instead of piling up columns. Columns run edge-to-edge, and a new overview — the grid button in the bottom bar — shows all your open columns at a glance so you can jump between or close them (also available on desktop).',
+      'The mobile bottom bar is clearer, with separate buttons for the column overview, adding a column, and composing a note. The active deck and deck switcher now appear in the top bar on mobile too.',
+      'A batch of iOS fixes: the layout no longer crops oddly, focusing a text field no longer leaves the page stuck zoomed in, columns sit flush under the toolbar, and a stray browser sign-in popup triggered by some relays and profiles is gone.'
+    ]
+  },
+  {
+    version: '26.14.2',
+    date: '2026-06-15',
+    highlights: [
+      'Deleting a deck now sticks across your devices. A deck you remove on one device no longer reappears on another after it syncs, and the brief Undo still brings it back if you change your mind.'
+    ]
+  },
+  {
+    version: '26.14.1',
+    date: '2026-06-14',
+    highlights: [
+      'The Muted list now spells out whether each muted user is Public or Private, with a globe or lock label and a tooltip explaining what it means, instead of an unlabeled icon. Switching a mute between public and private is now instant, and tells you if it could not be saved instead of silently doing nothing.'
+    ]
+  },
+  {
     version: '26.14.0',
     date: '2026-06-14',
     highlights: [

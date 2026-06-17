@@ -1422,6 +1422,7 @@ class LocalStorageService {
         lastSavedAt: now
       }
       return {
+        ...workspace,
         decks: [...workspace.decks, newDeck],
         activeDeckId: newDeck.id // switches active to new
       }
@@ -1442,6 +1443,7 @@ class LocalStorageService {
         lastSavedAt: now
       }
       return {
+        ...workspace,
         decks: [...workspace.decks, newDeck],
         activeDeckId: newDeck.id
       }
@@ -1491,10 +1493,11 @@ class LocalStorageService {
     this.mutateActiveWorkspace((workspace) => {
       const idx = workspace.decks.findIndex((d) => d.id === deckId)
       if (idx < 0) return workspace
+      const now = Date.now()
+      const deletedDecks = { ...(workspace.deletedDecks ?? {}), [deckId]: now }
       const nextDecks = workspace.decks.filter((d) => d.id !== deckId)
       // Last-deck guard.
       if (nextDecks.length === 0) {
-        const now = Date.now()
         const untitled: TDeck = {
           id: randomId(),
           name: 'Untitled deck',
@@ -1504,14 +1507,43 @@ class LocalStorageService {
           updatedAt: now,
           lastSavedAt: now
         }
-        return { decks: [untitled], activeDeckId: untitled.id }
+        return { ...workspace, decks: [untitled], activeDeckId: untitled.id, deletedDecks }
       }
       let nextActiveId = workspace.activeDeckId
       if (workspace.activeDeckId === deckId) {
         nextActiveId = nextDecks[Math.min(idx, nextDecks.length - 1)].id
       }
-      return { decks: nextDecks, activeDeckId: nextActiveId }
+      return { ...workspace, decks: nextDecks, activeDeckId: nextActiveId, deletedDecks }
     })
+  }
+
+  /**
+   * Re-insert a previously-deleted deck (undo). Drops the lone last-deck-guard
+   * "Untitled deck" placeholder if it's the only deck, splices `deck` back in at
+   * `index`, makes it active, clears its tombstone, and preserves the
+   * workspace's other fields. No-op if the workspace is gone.
+   */
+  restoreDeck(workspaceKey: string, deck: TDeck, index: number): void {
+    const all = this.getWorkspacesByAccount()
+    const workspace = all[workspaceKey]
+    if (!workspace) return
+
+    let nextDecks = [...workspace.decks]
+    const guard = nextDecks.find(
+      (d) => d.name === 'Untitled deck' && d.columns.length === 0 && d.savedColumns.length === 0
+    )
+    if (guard && nextDecks.length === 1) nextDecks = []
+    nextDecks.splice(index, 0, deck)
+
+    const deletedDecks = { ...(workspace.deletedDecks ?? {}) }
+    delete deletedDecks[deck.id]
+    const hasTombstones = Object.keys(deletedDecks).length > 0
+
+    const next: TAccountWorkspace = { ...workspace, decks: nextDecks, activeDeckId: deck.id }
+    if (hasTombstones) next.deletedDecks = deletedDecks
+    else delete next.deletedDecks
+
+    this.setWorkspacesByAccount({ ...all, [workspaceKey]: next })
   }
 
   /**

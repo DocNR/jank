@@ -1097,27 +1097,9 @@ export function ColumnsProvider({ children }: { children: ReactNode }) {
     recentlyDeletedRef.current = null
 
     const current = storage.getWorkspacesByAccount()
-    const workspace = current[snap.workspaceKey]
-    if (!workspace) return false
+    if (!current[snap.workspaceKey]) return false
 
-    // Re-insert at the original index. If last-deck guard fired (workspace
-    // has a single Untitled+empty deck post-delete), drop it; otherwise keep.
-    let nextDecks = [...workspace.decks]
-    const lastDeckGuardDeck = nextDecks.find(
-      (d) => d.name === 'Untitled deck' && d.columns.length === 0 && d.savedColumns.length === 0
-    )
-    if (lastDeckGuardDeck && nextDecks.length === 1) {
-      nextDecks = []
-    }
-    nextDecks.splice(snap.restorationIndex, 0, snap.deck)
-
-    storage.setWorkspacesByAccount({
-      ...current,
-      [snap.workspaceKey]: {
-        decks: nextDecks,
-        activeDeckId: snap.deck.id
-      }
-    })
+    storage.restoreDeck(snap.workspaceKey, snap.deck, snap.restorationIndex)
     refreshWorkspacesByAccount()
     setColumns(storage.getColumns())
     void deckSyncService.publishWorkspace(snap.workspaceKey)

@@ -230,6 +230,37 @@ export function routeOpensOwnColumn(route: string): boolean {
     route === '/profile'
   )
 }
+/**
+ * Mobile-only routing policy for the native push-stack: returns `true` when a
+ * pushed URL should spawn a deck COLUMN rather than a pushed SCREEN.
+ *
+ * On mobile, feed-shaped *standing* surfaces (Hashtag, Relay, Search,
+ * Notifications, Bookmarks, Mutes) stay deck columns — they're feeds you keep.
+ * Everything else reached by an in-feed tap (note threads, profiles, following
+ * lists, settings, ...) becomes a native pushed screen. This is
+ * `routeOpensOwnColumn` MINUS profiles, which become screens per the mobile
+ * drill-down model.
+ */
+export function opensAsColumnOnMobile(route: string): boolean {
+  return (
+    parseHashtagRoute(route) !== null ||
+    parseRelayRoute(route) !== null ||
+    parseSearchRoute(route) !== null ||
+    route === '/notifications' ||
+    route === '/bookmarks' ||
+    route === '/mutes'
+  )
+}
+/**
+ * Map a canonical app URL to the form the SECONDARY_ROUTES table matches, for
+ * the mobile push-stack's page dispatch. Only profiles need it today: the app
+ * emits `/p/<id>` but ProfilePage is registered at `/users/:id`. Note threads,
+ * settings, following lists, etc. already use forms the table knows.
+ */
+export function normalizeToSecondaryRoute(route: string): string {
+  if (route.startsWith('/p/')) return '/users/' + route.slice('/p/'.length)
+  return route
+}
 export const toMuteList = () => '/mutes'
 export const toRizful = () => '/rizful'
 export const toBookmarks = () => '/bookmarks'
