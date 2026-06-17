@@ -75,8 +75,8 @@ type TColumnsContext = {
    * already in `removingIds`.
    */
   removeColumn: (id: string) => void
-  /** Remove every column where transient === true. Pinned columns are untouched. */
-  closeAllUnpinned: () => void
+  /** Remove every column where transient === true. Permanent columns are untouched. */
+  closeAllTransient: () => void
   /**
    * Patch a column's `config` object in-place (shallow merge). Persists
    * immediately. Used today by the per-column notification list-style
@@ -842,7 +842,7 @@ export function ColumnsProvider({ children }: { children: ReactNode }) {
     [persist]
   )
 
-  const closeAllUnpinned = useCallback(() => {
+  const closeAllTransient = useCallback(() => {
     setColumns((prev) => {
       const next = prev.filter((c) => !c.transient)
       persist(next)
@@ -1157,7 +1157,7 @@ export function ColumnsProvider({ children }: { children: ReactNode }) {
       focusOrCreateColumn,
       addTransientColumn,
       removeColumn,
-      closeAllUnpinned,
+      closeAllTransient,
       updateColumnConfig,
       closeColumnsForAccount,
       reorderColumns,
@@ -1190,7 +1190,7 @@ export function ColumnsProvider({ children }: { children: ReactNode }) {
       focusOrCreateColumn,
       addTransientColumn,
       removeColumn,
-      closeAllUnpinned,
+      closeAllTransient,
       updateColumnConfig,
       v2Decks,
       activeDeck,
