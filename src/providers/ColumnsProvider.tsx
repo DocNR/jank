@@ -68,10 +68,6 @@ type TColumnsContext = {
     source: { viewContext: string; signingIdentity: string | null } | null,
     parentColumnId?: string
   ) => void
-  /** Promote a transient column to persisted (transient: false), then write through to localStorage. */
-  pinColumn: (id: string) => void
-  /** Demote a pinned column to transient (transient: true). Drops it from the persisted set without removing it from the live deck. */
-  unpinColumn: (id: string) => void
   /**
    * Remove any column (transient or persisted). Animates: marks the id
    * as removing for 280ms (column-fade-out keyframe) before the actual
@@ -810,31 +806,6 @@ export function ColumnsProvider({ children }: { children: ReactNode }) {
     [transientColumnMode, account?.pubkey, requestFocusedColumn]
   )
 
-  const pinColumn = useCallback(
-    (id: string) => {
-      setColumns((prev) => {
-        const next = prev.map((c) => (c.id === id ? { ...c, transient: false } : c))
-        persist(next)
-        return next
-      })
-    },
-    [persist]
-  )
-
-  const unpinColumn = useCallback(
-    (id: string) => {
-      setColumns((prev) => {
-        const next = prev.map((c) => (c.id === id ? { ...c, transient: true } : c))
-        // Persist drops `transient: true` entries, so demoting a column writes
-        // through to the persisted set as "removed". The column stays in the
-        // live deck until the user explicitly closes it (or reloads).
-        persist(next)
-        return next
-      })
-    },
-    [persist]
-  )
-
   // 280ms matches the `column-fade-out` keyframe in src/index.css. Holding
   // the id in `removingIds` for the duration of the animation is what makes
   // the keyboard shortcut animate identically to the mouse X click — both
@@ -1185,8 +1156,6 @@ export function ColumnsProvider({ children }: { children: ReactNode }) {
       addColumn,
       focusOrCreateColumn,
       addTransientColumn,
-      pinColumn,
-      unpinColumn,
       removeColumn,
       closeAllUnpinned,
       updateColumnConfig,
@@ -1220,8 +1189,6 @@ export function ColumnsProvider({ children }: { children: ReactNode }) {
       addColumn,
       focusOrCreateColumn,
       addTransientColumn,
-      pinColumn,
-      unpinColumn,
       removeColumn,
       closeAllUnpinned,
       updateColumnConfig,

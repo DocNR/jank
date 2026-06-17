@@ -33,8 +33,6 @@ export default function StarterCommands() {
   const {
     columns,
     focusOrCreateColumn,
-    pinColumn,
-    unpinColumn,
     removeColumn,
     closeAllUnpinned,
     reorderColumns
@@ -238,32 +236,6 @@ export default function StarterCommands() {
         // post-remove fallback (see DeckArea's lifecycle effect).
         setFocusBeamActive(false)
         removeColumn(a.id)
-      }
-    })
-    list.push({
-      id: 'column.pin',
-      label: t('Pin column'),
-      group: 'columns',
-      condition: () => {
-        const a = getActive()
-        return !!a && a.transient === true
-      },
-      run: () => {
-        const a = getActive()
-        if (a) pinColumn(a.id)
-      }
-    })
-    list.push({
-      id: 'column.unpin',
-      label: t('Unpin column'),
-      group: 'columns',
-      condition: () => {
-        const a = getActive()
-        return !!a && a.transient !== true
-      },
-      run: () => {
-        const a = getActive()
-        if (a) unpinColumn(a.id)
       }
     })
     list.push({
@@ -489,8 +461,6 @@ export default function StarterCommands() {
     accounts,
     account?.pubkey,
     profileByPubkey,
-    pinColumn,
-    unpinColumn,
     removeColumn,
     closeAllUnpinned,
     reorderColumns,
