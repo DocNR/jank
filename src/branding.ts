@@ -15,8 +15,8 @@
  * `repository`, and `homepage` fields must be kept in sync manually.
  */
 export const BRAND = {
-  name: 'jank',
-  shortName: 'jank',
+  name: 'JANK',
+  shortName: 'JANK',
   tagline: 'just another nostr klient',
   description: 'A TweetDeck-style multi-column deck for Nostr',
   keywords: 'jank, nostr, deck, multi-column, web, client, relay, social, pwa',

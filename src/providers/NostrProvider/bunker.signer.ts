@@ -37,7 +37,7 @@ export class BunkerSigner implements ISigner {
     if (isInitialConnection) {
       // Replicate nostr-tools' BunkerSigner.connect() but append a 4th param
       // carrying jank's client metadata (name/url/image) so the remote signer
-      // (Clave/Amber/etc.) shows "Jank" instead of a generic app name. The
+      // (Clave/Amber/etc.) shows "JANK" instead of a generic app name. The
       // library's connect() only sends [pubkey, secret] and exposes no metadata
       // argument, so we issue the request ourselves. This mirrors the metadata
       // jank already advertises in its nostrconnect:// URI.
@@ -48,7 +48,7 @@ export class BunkerSigner implements ISigner {
       // params[3] is a JSON *string* (not a nested object), keys exactly
       // name/url/image.
       const clientMetadata = JSON.stringify({
-        name: 'Jank',
+        name: 'JANK',
         url: BRAND.homepage,
         image: `${BRAND.homepage}/apple-touch-icon.png`
       })

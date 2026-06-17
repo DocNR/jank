@@ -1,3 +1,4 @@
+import { BRAND } from '@/branding'
 import AgentPairingWizard from '@/components/AgentPairingWizard'
 import { Button } from '@/components/ui/button'
 import {
@@ -114,7 +115,8 @@ const AgentsSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
                   <ul className="list-disc ps-5 space-y-1">
                     <li>
                       {t(
-                        'Columns in this deck that view your other paired jank accounts (their npubs become visible to the agent)'
+                        'Columns in this deck that view your other paired {{brand}} accounts (their npubs become visible to the agent)',
+                        { brand: BRAND.name }
                       )}
                     </li>
                   </ul>

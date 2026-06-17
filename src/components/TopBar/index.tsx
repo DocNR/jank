@@ -43,7 +43,7 @@ export default function TopBar() {
           type="button"
           onClick={onBrandTap}
           className="flex h-12 shrink-0 items-center justify-center px-2 transition-opacity hover:opacity-80"
-          aria-label="jank — back to deck"
+          aria-label="JANK — back to deck"
         >
           <JankMark size={28} />
         </button>

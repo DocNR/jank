@@ -9,6 +9,7 @@
  *   paddingTop accordingly and the dismiss propagates without a remount.
  * - Fixed height of 2.5rem (h-10) keeps the layout calc trivial.
  */
+import { BRAND } from '@/branding'
 import { atom, useAtom } from 'jotai'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -65,7 +66,9 @@ export default function MobileWarningBanner() {
       <div className="min-w-0 flex-1 truncate">
         <span className="font-semibold">{t('Mobile is under construction')}</span>{' '}
         <span className="opacity-90">
-          {t('jank is best on desktop for now. Most things work — some rough edges.')}
+          {t('{{brand}} is best on desktop for now. Most things work — some rough edges.', {
+            brand: BRAND.name
+          })}
         </span>
       </div>
       <button
