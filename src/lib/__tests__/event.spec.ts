@@ -89,4 +89,60 @@ describe('isInMutedThread', () => {
   it('is a fast no-op for an empty mute set', () => {
     expect(isInMutedThread(ev({ id: ROOT }), new Set())).toBe(false)
   })
+
+  // Reposts (kind 6 / 16) re-surface another note verbatim, so they belong to
+  // the reposted note's thread — not their own. A reposter's client commonly
+  // copies the whole p-tag list, which is how a repost of a muted hellthread
+  // ends up tagging (and notifying) you.
+  it('hides a kind-6 repost of the muted root (embedded JSON)', () => {
+    const inner = ev({ id: ROOT, tags: [] })
+    const repost = ev({
+      id: 'rp',
+      kind: 6,
+      content: JSON.stringify(inner),
+      tags: [['e', ROOT]]
+    })
+    expect(isInMutedThread(repost, muted)).toBe(true)
+  })
+
+  it('hides a kind-6 repost of a reply inside the muted thread (embedded JSON)', () => {
+    const innerReply = ev({ id: PARENT, tags: [['e', ROOT, '', 'root']] })
+    const repost = ev({
+      id: 'rp2',
+      kind: 6,
+      content: JSON.stringify(innerReply),
+      tags: [['e', PARENT]]
+    })
+    expect(isInMutedThread(repost, muted)).toBe(true)
+  })
+
+  it('hides a kind-6 repost when only the e-tag is present (no content)', () => {
+    const repost = ev({ id: 'rp3', kind: 6, content: '', tags: [['e', ROOT]] })
+    expect(isInMutedThread(repost, muted)).toBe(true)
+  })
+
+  it('hides a kind-16 generic repost of the muted root', () => {
+    const inner = ev({ id: ROOT, tags: [] })
+    const repost = ev({
+      id: 'rp4',
+      kind: 16,
+      content: JSON.stringify(inner),
+      tags: [
+        ['e', ROOT],
+        ['k', '1']
+      ]
+    })
+    expect(isInMutedThread(repost, muted)).toBe(true)
+  })
+
+  it('does NOT hide a repost of an unmuted note', () => {
+    const inner = ev({ id: OTHER, tags: [] })
+    const repost = ev({
+      id: 'rp5',
+      kind: 6,
+      content: JSON.stringify(inner),
+      tags: [['e', OTHER]]
+    })
+    expect(isInMutedThread(repost, muted)).toBe(false)
+  })
 })

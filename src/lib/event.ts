@@ -237,12 +237,44 @@ export function getThreadRootId(event: Event): string {
   return getRootEventHexId(event) ?? event.id
 }
 
+// Parse the note embedded in a repost's content. Kind-6/16 reposts carry the
+// full reposted event JSON in `content`; returns undefined when it is absent or
+// not a parseable event (caller falls back to the e tag).
+function getRepostedNote(event: Event): Event | undefined {
+  if (!event.content) return undefined
+  try {
+    const parsed = JSON.parse(event.content) as Event
+    if (parsed && typeof parsed.id === 'string' && Array.isArray(parsed.tags)) {
+      return parsed
+    }
+  } catch {
+    // not JSON
+  }
+  return undefined
+}
+
 // True when `event` belongs to a muted thread: either it IS a muted id, or its
 // computed thread root is muted (which every descendant shares via the NIP-10
 // root marker). O(1); no reply-tree traversal.
 export function isInMutedThread(event: Event, muteEventIdSet: Set<string>): boolean {
   if (muteEventIdSet.size === 0) return false
-  return muteEventIdSet.has(event.id) || muteEventIdSet.has(getThreadRootId(event))
+  if (muteEventIdSet.has(event.id) || muteEventIdSet.has(getThreadRootId(event))) return true
+
+  // A repost (kind 6 / 16) re-surfaces another note verbatim, so it belongs to
+  // the reposted note's thread — not its own. getThreadRootId only understands
+  // kind-1 threads and treats a repost as its own root, so the reposted id never
+  // gets checked. Unwrap the target explicitly: prefer the embedded JSON, else
+  // the e-tag id (a top-level note is its own thread root). Without this a repost
+  // of a muted hellthread slips into feeds and notifications.
+  if (event.kind === kinds.Repost || event.kind === kinds.GenericRepost) {
+    const target = getRepostedNote(event)
+    if (target) {
+      return muteEventIdSet.has(target.id) || muteEventIdSet.has(getThreadRootId(target))
+    }
+    const repostedId = event.tags.find(tagNameEquals('e'))?.[1]
+    if (repostedId && muteEventIdSet.has(repostedId)) return true
+  }
+  return false
 }
 
 export function getRootTag(event?: Event): { type: 'e' | 'a' | 'i'; tag: string[] } | undefined {

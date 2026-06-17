@@ -41,7 +41,10 @@ export function RepostNotification({
       sender={notification.pubkey}
       sentAt={notification.created_at}
       targetEvent={event}
-      description={t('reposted your note')}
+      // Only "your note" when the reposted note is actually the viewer's. A
+      // reposter's client often copies the whole p-tag list, so a repost of a
+      // hellthread you're merely tagged in lands here too — don't claim it's yours.
+      description={event.pubkey === pubkey ? t('reposted your note') : t('reposted a note')}
       isNew={isNew}
     />
   )
