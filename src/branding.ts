@@ -23,7 +23,10 @@ export const BRAND = {
   homepage: 'https://jank.army',
   repo: 'https://github.com/DocNR/jank',
   issuesUrl: 'https://github.com/DocNR/jank/issues/new',
-  nostrClientTag: 'jank',
+  // NIP-89 client label other clients render as "via JANK". It's a bare
+  // ['client', value] label (no d-tag / handler address, not matched in logic),
+  // so it's visible brand copy — keep it as JANK, not a lowercase wire id.
+  nostrClientTag: 'JANK',
   // Empty until a jank support account exists. ErrorBoundary hides the
   // social-support link when this is empty.
   supportNpub: '',
