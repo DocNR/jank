@@ -15,6 +15,14 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.15.4',
+    date: '2026-06-17',
+    highlights: [
+      'Muting a thread now also hides reposts of that thread. Before, someone reposting a muted conversation could still surface it in your feed and notifications.',
+      'Repost notifications no longer claim "reposted your note" when the reposted note is not actually yours, such as when someone reposts a thread that only tags you.'
+    ]
+  },
+  {
     version: '26.15.3',
     date: '2026-06-17',
     highlights: [
