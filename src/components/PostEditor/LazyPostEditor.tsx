@@ -1,3 +1,4 @@
+import postEditor from '@/services/post-editor.service'
 import { ComponentProps, lazy, Suspense, useEffect, useState } from 'react'
 
 const PostEditor = lazy(() => import('./index'))
@@ -18,6 +19,17 @@ export default function LazyPostEditor(props: ComponentProps<typeof PostEditor>)
   const [mounted, setMounted] = useState(props.open)
   useEffect(() => {
     if (props.open) setMounted(true)
+  }, [props.open])
+
+  // Tell feeds a composer is open so they hold their timeline steady (see
+  // post-editor.service `openCount`). Registered here rather than inside the
+  // lazy PostEditor so it fires the moment `open` flips true — before the
+  // Suspense chunk resolves — closing the race where a live note arrives
+  // during first-compose chunk load and churns the row that owns this dialog.
+  useEffect(() => {
+    if (!props.open) return
+    postEditor.registerOpen()
+    return () => postEditor.unregisterOpen()
   }, [props.open])
 
   if (!mounted) return null

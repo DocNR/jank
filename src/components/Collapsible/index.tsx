@@ -60,7 +60,7 @@ export default function Collapsible({
         <div className="to-background/90 absolute bottom-0 z-10 flex h-40 w-full items-end justify-center bg-linear-to-b from-transparent pb-4">
           <div className="bg-background rounded-lg">
             <Button
-              className="bg-foreground hover:bg-foreground/80"
+              className="bg-foreground text-background hover:bg-foreground/80"
               onClick={(e) => {
                 e.stopPropagation()
                 setExpanded(!expanded)
