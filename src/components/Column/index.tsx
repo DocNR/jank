@@ -66,7 +66,7 @@ export function Column({ column, dragHandleProps, style }: Props) {
   // A per-column `column.width` override still wins when present.
   const baseWidth: number | string = column.width ?? 'var(--deck-col-width, 400px)'
   const { isSmallScreen } = useScreenSize()
-  const { pinColumn, unpinColumn, removeColumn, removingIds, updateColumnConfig } = useColumns()
+  const { removeColumn, removingIds, updateColumnConfig } = useColumns()
   const { notificationListStyle: globalListStyle } = useUserPreferences()
   const { pubkey: activeAccountPubkey } = useNostr()
   const setActiveColumnId = useSetAtom(activeColumnIdAtom)
@@ -305,8 +305,6 @@ export function Column({ column, dragHandleProps, style }: Props) {
         <ColumnHeader
           column={column}
           onRemove={handleHeaderRemove}
-          onPin={pinColumn}
-          onUnpin={unpinColumn}
           onScrollToTop={handleScrollToTop}
           dragHandleProps={dragHandleProps}
           isFocused={isFocused}

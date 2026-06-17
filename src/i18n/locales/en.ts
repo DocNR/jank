@@ -1107,6 +1107,7 @@ export default {
     'Your agent never gets your signing key — your signer still gates every event you publish. {{brand}} must stay open in a browser tab for your agent to work.':
       'Your agent never gets your signing key — your signer still gates every event you publish. {{brand}} must stay open in a browser tab for your agent to work.',
     'Columns in this deck that view your other paired {{brand}} accounts (their npubs become visible to the agent)':
-      'Columns in this deck that view your other paired {{brand}} accounts (their npubs become visible to the agent)'
+      'Columns in this deck that view your other paired {{brand}} accounts (their npubs become visible to the agent)',
+    'Close all temporary columns': 'Close all temporary columns'
   }
 }

@@ -15,6 +15,13 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.15.3',
+    date: '2026-06-17',
+    highlights: [
+      'Columns you open by clicking are now always temporary and clear when you reload; the per-column pin button is gone. Use the + button to add the columns you want to keep.'
+    ]
+  },
+  {
     version: '26.15.2',
     date: '2026-06-16',
     highlights: [

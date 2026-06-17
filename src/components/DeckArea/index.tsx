@@ -145,7 +145,7 @@ export default function DeckArea() {
       if (activeColumnId !== null) setActiveColumnId(null)
       // Defensive: the modal-split rule wraps `column.close` to exit beam
       // before removing, so single-column close lands here with beam already
-      // OFF. Catches bulk-close paths (closeAllUnpinned) and any future
+      // OFF. Catches bulk-close paths (closeAllTransient) and any future
       // out-of-band removal.
       if (focusBeamActive) setFocusBeamActive(false)
       return

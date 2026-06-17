@@ -33,10 +33,8 @@ export default function StarterCommands() {
   const {
     columns,
     focusOrCreateColumn,
-    pinColumn,
-    unpinColumn,
     removeColumn,
-    closeAllUnpinned,
+    closeAllTransient,
     reorderColumns
   } = useColumns()
   const { account, switchAccount, setActivePubkey } = useNostr()
@@ -241,37 +239,11 @@ export default function StarterCommands() {
       }
     })
     list.push({
-      id: 'column.pin',
-      label: t('Pin column'),
-      group: 'columns',
-      condition: () => {
-        const a = getActive()
-        return !!a && a.transient === true
-      },
-      run: () => {
-        const a = getActive()
-        if (a) pinColumn(a.id)
-      }
-    })
-    list.push({
-      id: 'column.unpin',
-      label: t('Unpin column'),
-      group: 'columns',
-      condition: () => {
-        const a = getActive()
-        return !!a && a.transient !== true
-      },
-      run: () => {
-        const a = getActive()
-        if (a) unpinColumn(a.id)
-      }
-    })
-    list.push({
-      id: 'column.closeAllUnpinned',
-      label: t('Close all unpinned columns'),
+      id: 'column.closeAllTransient',
+      label: t('Close all temporary columns'),
       group: 'columns',
       condition: () => columns.some((c) => c.transient === true),
-      run: () => closeAllUnpinned()
+      run: () => closeAllTransient()
     })
     list.push({
       id: 'column.moveLeft',
@@ -489,10 +461,8 @@ export default function StarterCommands() {
     accounts,
     account?.pubkey,
     profileByPubkey,
-    pinColumn,
-    unpinColumn,
     removeColumn,
-    closeAllUnpinned,
+    closeAllTransient,
     reorderColumns,
     focusOrCreateColumn,
     switchAccount,

@@ -10,7 +10,7 @@ import { useUserPreferences } from '@/providers/UserPreferencesProvider'
 import { TColumn } from '@/types/column'
 import { notificationUnreadCountAtom } from '@/atoms/notification-unread-count'
 import { useAtomValue } from 'jotai'
-import { Pin, PinOff, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { HTMLAttributes, MouseEvent as ReactMouseEvent, memo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ColumnHeaderMenu from './ColumnHeaderMenu'
@@ -20,20 +20,16 @@ import { signingState } from './signing-state'
 /**
  * Column header. Adaptive layout:
  * - matched / view-only columns: a single row —
- *   avatar · label · [signing chip] · ——— · 📌 · ⋯ · ✕
+ *   avatar · label · [signing chip] · ——— · ⋯ · ✕
  * - mismatched ("loud") columns: two rows — row 1 carries identity + controls,
  *   row 2 is the full-width "Acting as" signing indicator so it can never be
  *   squeezed or clipped.
  *
- * Pin/unpin stays an inline button (the icon is the pin-state indicator —
- * lit when pinned, muted when transient). Compose + the list-style toggle
- * live in the ⋯ ColumnHeaderMenu.
+ * Compose + the list-style toggle live in the ⋯ ColumnHeaderMenu.
  */
 const ColumnHeader = memo(function ColumnHeader({
   column,
   onRemove,
-  onPin,
-  onUnpin,
   onScrollToTop,
   dragHandleProps,
   isFocused,
@@ -44,8 +40,6 @@ const ColumnHeader = memo(function ColumnHeader({
 }: {
   column: TColumn
   onRemove: (id: string) => void
-  onPin: (id: string) => void
-  onUnpin: (id: string) => void
   /** Scrolls the column body to the top. Fired on a plain title-bar click
    * (not on the inner controls or a drag). */
   onScrollToTop: () => void
@@ -145,39 +139,6 @@ const ColumnHeader = memo(function ColumnHeader({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {column.transient ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground hover:text-foreground size-9 sm:size-7"
-                  aria-label={t('Pin column')}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => onPin(column.id)}
-                >
-                  <Pin className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t('Pin column')}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-primary size-9 sm:size-7"
-                  aria-label={t('Unpin column')}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => onUnpin(column.id)}
-                >
-                  <PinOff className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t('Unpin column')}</TooltipContent>
-            </Tooltip>
-          )}
           {showMenu && (
             <ColumnHeaderMenu
               showCompose={showCompose}
