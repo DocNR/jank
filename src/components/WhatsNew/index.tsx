@@ -1,3 +1,4 @@
+import { BRAND } from '@/branding'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -57,7 +58,9 @@ export default function WhatsNew(): JSX.Element | null {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("What's new")}</DialogTitle>
-          <DialogDescription>{t('Recent updates to jank.')}</DialogDescription>
+          <DialogDescription>
+            {t('Recent updates to {{brand}}.', { brand: BRAND.name })}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 max-h-[60vh] overflow-y-auto">
           {result.notes.map((note) => (

@@ -1,3 +1,4 @@
+import { BRAND } from '@/branding'
 import { Button } from '@/components/ui/button'
 import { useServiceWorkerUpdate } from '@/hooks/useServiceWorkerUpdate'
 import { X } from 'lucide-react'
@@ -27,7 +28,9 @@ export default function UpdatePrompt(): JSX.Element | null {
       aria-live="polite"
       className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-3 bg-primary px-4 py-2 text-primary-foreground shadow-md"
     >
-      <span className="text-sm">{t('A new version of jank is available.')}</span>
+      <span className="text-sm">
+        {t('A new version of {{brand}} is available.', { brand: BRAND.name })}
+      </span>
       <Button size="sm" variant="secondary" onClick={reload}>
         {t('Reload')}
       </Button>

@@ -73,7 +73,7 @@ export default function MultiAccountConfirmModal({
                 <p>
                   <b>{displayName}</b> is currently paired with{' '}
                   {existingLabel(conflict.existingSignerType)}. Replacing with NostrConnect
-                  rotates to a remote signer — you'll lose direct private-key access in jank.
+                  rotates to a remote signer — you'll lose direct private-key access in JANK.
                 </p>
                 <p>Make sure you've backed up the key before continuing.</p>
               </DialogDescription>

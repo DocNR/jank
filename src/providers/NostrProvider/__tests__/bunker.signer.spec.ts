@@ -118,7 +118,7 @@ describe('BunkerSigner.login — reconnection does not block on the v3 probe', (
     const meta = JSON.parse(params[3] as string)
     // Keys are exactly name/url/image (use `image`, not imageURL/picture).
     expect(Object.keys(meta).sort()).toEqual(['image', 'name', 'url'])
-    expect(meta.name).toBe('Jank')
+    expect(meta.name).toBe('JANK')
     expect(meta.url).toBe('https://jank.army')
     expect(meta.image).toBe('https://jank.army/apple-touch-icon.png')
   })

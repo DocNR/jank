@@ -1,3 +1,4 @@
+import { BRAND } from '@/branding'
 import {
   Dialog,
   DialogContent,
@@ -54,7 +55,8 @@ export default function AgentPairingWizard({ workspaceOwner, open, onClose }: Pr
           <DialogTitle>{t('Pair an AI Agent')}</DialogTitle>
           <DialogDescription>
             {t(
-              'Your agent never gets your signing key — your signer still gates every event you publish. jank must stay open in a browser tab for your agent to work.'
+              'Your agent never gets your signing key — your signer still gates every event you publish. {{brand}} must stay open in a browser tab for your agent to work.',
+              { brand: BRAND.name }
             )}
           </DialogDescription>
         </DialogHeader>
