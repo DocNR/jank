@@ -3,6 +3,7 @@ import Donation from '@/components/Donation'
 import {
   toAgentsSettings,
   toAppearanceSettings,
+  toDataRecoverySettings,
   toEmojiPackSettings,
   toGeneralSettings,
   toPostSettings,
@@ -15,6 +16,7 @@ import { cn } from '@/lib/utils'
 import { useSecondaryPage } from '@/DeckManager'
 import { useNostr } from '@/providers/NostrProvider'
 import {
+  ArchiveRestore,
   Bot,
   Check,
   ChevronRight,
@@ -77,6 +79,15 @@ export default function Settings({ onItemClick }: { onItemClick?: () => void } =
           <div className="flex items-center gap-4">
             <Languages />
             <div>{t('Translation')}</div>
+          </div>
+          <ChevronRight className="rtl:-scale-x-100" />
+        </SettingItem>
+      )}
+      {!!pubkey && (
+        <SettingItem className="clickable" onClick={() => navigate(toDataRecoverySettings())}>
+          <div className="flex items-center gap-4">
+            <ArchiveRestore />
+            <div>{t('Data recovery')}</div>
           </div>
           <ChevronRight className="rtl:-scale-x-100" />
         </SettingItem>

@@ -6,6 +6,7 @@ import ExternalContentPage from '@/pages/secondary/ExternalContentPage'
 import FollowingListPage from '@/pages/secondary/FollowingListPage'
 import FollowPackPage from '@/pages/secondary/FollowPackPage'
 import GeneralSettingsPage from '@/pages/secondary/GeneralSettingsPage'
+import LazarusSettingsPage from '@/pages/secondary/LazarusSettingsPage'
 import NoteListPage from '@/pages/secondary/NoteListPage'
 import NotePage from '@/pages/secondary/NotePage'
 import OthersRelaySettingsPage from '@/pages/secondary/OthersRelaySettingsPage'
@@ -43,6 +44,7 @@ const SECONDARY_ROUTE_CONFIGS: {
   { path: '/external-content', element: <ExternalContentPage /> },
   { path: '/settings', element: <SettingsPage /> },
   { path: '/settings/relays', element: <RelaySettingsPage /> },
+  { path: '/settings/data-recovery', element: <LazarusSettingsPage /> },
   { path: '/settings/wallet', element: <WalletPage /> },
   { path: '/settings/posts', element: <PostSettingsPage /> },
   { path: '/settings/general', element: <GeneralSettingsPage /> },

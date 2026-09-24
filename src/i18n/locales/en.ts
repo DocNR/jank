@@ -1109,6 +1109,76 @@ export default {
     'Columns in this deck that view your other paired {{brand}} accounts (their npubs become visible to the agent)':
       'Columns in this deck that view your other paired {{brand}} accounts (their npubs become visible to the agent)',
     'Close all temporary columns': 'Close all temporary columns',
-    'reposted a note': 'reposted a note'
+    'reposted a note': 'reposted a note',
+    current: 'current',
+    recommended: 'recommended',
+    'empty state': 'empty state',
+    '{{count}} items_one': '{{count}} item',
+    '{{count}} items_other': '{{count}} items',
+    '≈ {{min}}–{{max}} items': '≈ {{min}}–{{max}} items',
+    '{{count}} private': '{{count}} private',
+    'Estimated from the size of the encrypted private items, which could not be decrypted.':
+      'Estimated from the size of the encrypted private items, which could not be decrypted.',
+    'encrypted, estimated': 'encrypted, estimated',
+    'Some private items could not be decrypted, so this count may be higher.':
+      'Some private items could not be decrypted, so this count may be higher.',
+    'partial count': 'partial count',
+    'found on {{count}} relays_one': 'found on {{count}} relay',
+    'found on {{count}} relays_other': 'found on {{count}} relays',
+    'Too large for a remote signer to decrypt or restore':
+      'Too large for a remote signer to decrypt or restore',
+    'Too large to restore with a remote signer': 'Too large to restore with a remote signer',
+    'Could not decrypt the private items': 'Could not decrypt the private items',
+    Review: 'Review',
+    'Recovery published. It may take a moment to propagate.':
+      'Recovery published. It may take a moment to propagate.',
+    'Could not publish the recovery event.': 'Could not publish the recovery event.',
+    'Data recovery': 'Data recovery',
+    'Sign in to scan your relay history for lost data.':
+      'Sign in to scan your relay history for lost data.',
+    'Scan your relays for older versions of your lists and profiles, and restore one if a client clobbered it. Scans are read-only. Nothing is published until you review the change and confirm.':
+      'Scan your relays for older versions of your lists and profiles, and restore one if a client clobbered it. Scans are read-only. Nothing is published until you review the change and confirm.',
+    'You are signed in with a remote signer. Lists over 64 KB, like a mute list with many private items or a big follow list, cannot be decrypted or restored through NIP-46. Use a browser extension signer (NIP-07) or a local key for those.':
+      'You are signed in with a remote signer. Lists over 64 KB, like a mute list with many private items or a big follow list, cannot be decrypted or restored through NIP-46. Use a browser extension signer (NIP-07) or a local key for those.',
+    Scan: 'Scan',
+    'The scan failed. Check your relay connections and try again.':
+      'The scan failed. Check your relay connections and try again.',
+    'No versions found. This scan saw {{queried}} relays and {{responding}} answered, so an empty result may just mean the relays asked had no history.':
+      'No versions found. This scan saw {{queried}} relays and {{responding}} answered, so an empty result may just mean the relays asked had no history.',
+    'For this kind, an empty list can be intentional, so nothing is recommended. Choose the version you actually want.':
+      'For this kind, an empty list can be intentional, so nothing is recommended. Choose the version you actually want.',
+    'Decrypting private items…': 'Decrypting private items…',
+    'Review recovery': 'Review recovery',
+    'Restoring replaces your current {{kind}} with the selected version.':
+      'Restoring replaces your current {{kind}} with the selected version.',
+    '{{count}} items would be added_one': '{{count}} item would be added',
+    '{{count}} items would be added_other': '{{count}} items would be added',
+    '{{count}} items would be removed_one': '{{count}} item would be removed',
+    '{{count}} items would be removed_other': '{{count}} items would be removed',
+    'This restores fewer items than you have now. It will also re-apply moderation from that version for mute lists.':
+      'This restores fewer items than you have now. It will also re-apply moderation from that version for mute lists.',
+    'Private items in one of these versions could not be decrypted, so the changes above cover public items only. By size, the selected version has {{chosen}} items and your current one has {{current}}.':
+      'Private items in one of these versions could not be decrypted, so the changes above cover public items only. By size, the selected version has {{chosen}} items and your current one has {{current}}.',
+    'This version is too large to sign with a remote signer: NIP-46 requests are limited to 64 KB. Large lists, like a mute list with many private items or a big follow list, can only be restored with a browser extension signer (NIP-07) or a local key.':
+      'This version is too large to sign with a remote signer: NIP-46 requests are limited to 64 KB. Large lists, like a mute list with many private items or a big follow list, can only be restored with a browser extension signer (NIP-07) or a local key.',
+    'Accounts present now but missing from the restored version would be unmuted.':
+      'Accounts present now but missing from the restored version would be unmuted.',
+    'Old relay lists can point at relays that no longer exist.':
+      'Old relay lists can point at relays that no longer exist.',
+    'This list affects how other accounts interact with you.':
+      'This list affects how other accounts interact with you.',
+    Restore: 'Restore',
+    'Load older versions': 'Load older versions',
+    'Could not load older versions.': 'Could not load older versions.',
+    'Sort by': 'Sort by',
+    Date: 'Date',
+    Size: 'Size',
+    '{{count}} versions_one': '{{count}} version',
+    '{{count}} versions_other': '{{count}} versions',
+    '{{min}}–{{max}} items': '{{min}}–{{max}} items',
+    'Show {{count}} empty versions_one': 'Show {{count}} empty version',
+    'Show {{count}} empty versions_other': 'Show {{count}} empty versions',
+    'Hide empty versions': 'Hide empty versions',
+    'sudden drops': 'sudden drops'
   }
 }
