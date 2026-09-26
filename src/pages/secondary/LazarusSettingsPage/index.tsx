@@ -11,6 +11,7 @@ import {
   TriangleAlert
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import SecondaryPageLayout from '@/layouts/SecondaryPageLayout'
 import { fitsNip46Request } from '@/lib/nip46'
 import { useNostr } from '@/providers/NostrProvider'
@@ -212,6 +214,10 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
     | undefined
   >()
   const [recovering, setRecovering] = useState(false)
+  // Separate confirmations for a restore that removes items, and for one
+  // whose empty state has a meaning of its own (kind 10044)
+  const [shrinkConfirmed, setShrinkConfirmed] = useState(false)
+  const [intentConfirmed, setIntentConfirmed] = useState(false)
   const [privateTags, setPrivateTags] = useState<Map<string, string[][]>>(new Map())
   const [privateItemsNotes, setPrivateItemsNotes] = useState<Record<string, PrivateItemsNote>>({})
   const [decryptingIds, setDecryptingIds] = useState<Set<string>>(new Set())
@@ -384,6 +390,13 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
       else element.style.removeProperty('scrollbar-gutter')
     }
   }, [scrollContainer])
+
+  // A confirmation belongs to the review it was given in: a new review, or
+  // one compared again against a newer version, asks again
+  useEffect(() => {
+    setShrinkConfirmed(false)
+    setIntentConfirmed(false)
+  }, [pending])
 
   // A scan belongs to the account it ran for, so switching accounts starts over
   useEffect(() => {
@@ -938,20 +951,47 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
                   </span>
                 </div>
               )}
-              {pending.delta.privateUnknown && (
+              {pending.delta.privateUnknownChosen && (
                 <div className="flex items-start gap-2 rounded-md border p-2 text-xs">
                   <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>
                     {t(
-                      'Private items in one of these versions could not be decrypted, so the changes above cover public items only. By size, the selected version has {{chosen}} items and your current one has {{current}}.',
-                      {
-                        chosen: formatItemRange(pending.candidate.itemCount),
-                        current: pending.current
-                          ? formatItemRange(pending.profile.itemCount(pending.current))
-                          : '0'
-                      }
+                      'Private items in the selected version could not be decrypted, so the changes above leave them out. By size, it has {{size}} items.',
+                      { size: formatItemRange(pending.candidate.itemCount) }
                     )}
                   </span>
+                </div>
+              )}
+              {pending.delta.privateUnknownCurrent && pending.current && (
+                <div className="flex items-start gap-2 rounded-md border p-2 text-xs">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    {t(
+                      'Private items in your current version could not be decrypted, so the changes above leave them out. The restore replaces them, so it may remove items no count shows. By size, your current version has {{size}} items.',
+                      { size: formatItemRange(pending.profile.itemCount(pending.current)) }
+                    )}
+                  </span>
+                </div>
+              )}
+              {pending.profile.meaningfulEmpty && (
+                <div className="space-y-1 rounded-md border p-2 text-xs">
+                  <div>
+                    {getLazarusItemRange(pending.candidate.itemCount).max === 0
+                      ? t(
+                          'This announces that you no longer use NIP-4e; clients stop encrypting direct messages to your keys.'
+                        )
+                      : t(
+                          'This restores your NIP-4e encryption keys. Clients will encrypt direct messages to them again.'
+                        )}
+                  </div>
+                  <div className="text-muted-foreground">
+                    {!pending.current ||
+                    getLazarusItemRange(pending.profile.itemCount(pending.current)).max === 0
+                      ? t('The current empty state announces that you do not use NIP-4e.')
+                      : t(
+                          'Your current version lists keys that clients encrypt direct messages to.'
+                        )}
+                  </div>
                 </div>
               )}
               {pending.tooLargeForRemoteSigner && (
@@ -982,6 +1022,26 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
                   {t('This list affects how other accounts interact with you.')}
                 </div>
               )}
+              {pending.profile.meaningfulEmpty && (
+                <Label className="flex cursor-pointer items-center gap-2">
+                  <Checkbox
+                    checked={intentConfirmed}
+                    onCheckedChange={(checked) => setIntentConfirmed(!!checked)}
+                  />
+                  <span className="text-xs">{t('I intend this change')}</span>
+                </Label>
+              )}
+              {pending.delta.needsShrinkConfirmation && (
+                <Label className="flex cursor-pointer items-center gap-2">
+                  <Checkbox
+                    checked={shrinkConfirmed}
+                    onCheckedChange={(checked) => setShrinkConfirmed(!!checked)}
+                  />
+                  <span className="text-xs">
+                    {t('I understand this can remove items I have now')}
+                  </span>
+                </Label>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -990,7 +1050,12 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
             </Button>
             <Button
               onClick={confirmRecovery}
-              disabled={recovering || pending?.tooLargeForRemoteSigner}
+              disabled={
+                recovering ||
+                pending?.tooLargeForRemoteSigner ||
+                (pending?.delta.needsShrinkConfirmation && !shrinkConfirmed) ||
+                (pending?.profile.meaningfulEmpty && !intentConfirmed)
+              }
             >
               {recovering ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
