@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bytesToHex } from '@noble/hashes/utils'
-import { generateSecretKey, getPublicKey, nip44, type Event } from 'nostr-tools'
+import {
+  generateSecretKey,
+  getPublicKey,
+  nip44,
+  type Event,
+  type EventTemplate,
+  type Filter
+} from 'nostr-tools'
 
 // Mock the services before importing the module under test: the real ones
 // initialize local storage (window) at module load, and the relay source is
@@ -12,31 +19,44 @@ vi.mock('@/services/fetchers/relay-list.service', () => ({
 }))
 vi.mock('@/services/client.service', () => ({
   default: {
-    subscribe: vi.fn()
+    publishEvent: vi.fn(),
+    pool: { ensureRelay: vi.fn() },
+    getSignerFor: vi.fn(),
+    signer: undefined
   }
 }))
 vi.mock('@/lib/relay', () => ({
   getDefaultRelayUrls: () => ['wss://default']
 }))
+// The fixtures aren't signed; tests that need a forged event override this
+vi.mock('nostr-tools/pure', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('nostr-tools/pure')>()),
+  verifyEvent: vi.fn(() => true)
+}))
 
+import { verifyEvent } from 'nostr-tools/pure'
 import client from '@/services/client.service'
 import relayListService from '@/services/fetchers/relay-list.service'
 import { normalizeUrl } from '@/lib/url'
-import { getLazarusKindProfile, LAZARUS_REGISTRY } from './registry'
+import type { IRelay } from '@/types/relay-pool'
+import { getLazarusKindProfile, LAZARUS_REGISTRY, normalizeLazarusRelayUrl } from './registry'
 import {
   applyLazarusPrivateTags,
   buildLazarusRecoveryDraft,
+  checkLazarusCurrent,
   computeLazarusDelta,
   computeLazarusProfileChanges,
-  fetchLatestLazarusVersion,
   fitsLazarusRemoteRestore,
   getLazarusItemRange,
   getLazarusPublishRelays,
-  getLazarusScanRelays,
+  getLazarusScanPlan,
   groupLazarusCandidates,
   LAZARUS_ARCHIVAL_RELAYS,
+  lazarusScanReachedNoRelay,
   loadOlderLazarusVersions,
+  publishLazarusRecovery,
   rankLazarusCandidates,
+  readLazarusCurrent,
   scanLazarusKind,
   sortLazarusCandidates,
   type LazarusListItem,
@@ -105,6 +125,53 @@ describe('registry', () => {
     const profile = getLazarusKindProfile(10044)
     expect(profile?.meaningfulEmpty).toBe(true)
     expect(profile?.ranking).toBe('intent')
+  })
+
+  it('counts the n tags NIP-4e lists encryption keys in', () => {
+    const keyList = {
+      ...makeEvent({ kind: 10044 }),
+      tags: [
+        ['n', 'a'.repeat(64)],
+        ['n', 'b'.repeat(64)],
+        ['p', 'c'.repeat(64)]
+      ]
+    } as Event
+    expect(getLazarusKindProfile(10044)?.itemCount(keyList).count).toBe(2)
+  })
+
+  it('counts each item once, and no tag without a value', () => {
+    const follows = {
+      ...makeEvent({ kind: 3 }),
+      tags: [['p', 'a'], ['p', 'a', 'wss://hint'], ['p', 'b'], ['p'], ['p', ''], ['alt', 'x']]
+    } as Event
+    expect(LAZARUS_REGISTRY[3].itemCount(follows).count).toBe(2)
+  })
+
+  it("counts a profile's fields, so one wiped to {} is empty", () => {
+    const profile = (content: string) => ({ ...makeEvent({ kind: 0 }), content }) as Event
+    const count = (content: string) => LAZARUS_REGISTRY[0].itemCount(profile(content)).count
+    expect(count('{"name":"a","about":"b","bot":null}')).toBe(2)
+    expect(count('{}')).toBe(0)
+    expect(count('not json')).toBe(0)
+    expect(count('["name"]')).toBe(0)
+  })
+
+  it('compares relay URLs normalized on the relay kinds', () => {
+    const relayList = (kind: number, name: string) =>
+      ({
+        ...makeEvent({ kind }),
+        tags: [
+          [name, 'wss://Relay.Example/'],
+          [name, 'wss://relay.example'],
+          [name, 'wss://relay.example:443//']
+        ]
+      }) as Event
+    expect(LAZARUS_REGISTRY[10002].itemCount(relayList(10002, 'r')).count).toBe(1)
+    expect(LAZARUS_REGISTRY[10050].itemCount(relayList(10050, 'relay')).count).toBe(1)
+    expect(LAZARUS_REGISTRY[10006].itemCount(relayList(10006, 'relay')).count).toBe(1)
+    expect(normalizeLazarusRelayUrl('wss://Relay.Example:443//path/')).toBe(
+      'wss://relay.example/path'
+    )
   })
 
   it('never returns profiles for unregistered kinds', () => {
@@ -280,10 +347,64 @@ describe('rankLazarusCandidates', () => {
     expect(result.recommended?.event.id).toBe(versions[5].id)
   })
 
+  it('takes the lowest id as current among versions from the same second', () => {
+    const higher = { ...followListEvent(10, 1000), id: 'b'.repeat(64) }
+    const lower = { ...followListEvent(12, 1000), id: 'a'.repeat(64) }
+    const result = rankLazarusCandidates(LAZARUS_REGISTRY[3], [
+      { event: higher, relayUrl: 'wss://a' },
+      { event: lower, relayUrl: 'wss://a' }
+    ])
+    expect(result.current?.event.id).toBe(lower.id)
+  })
+
+  it('recommends the version before a small list was emptied', () => {
+    const small = followListEvent(3, 1000)
+    const emptied = followListEvent(0, 2000)
+    const result = rankLazarusCandidates(LAZARUS_REGISTRY[3], [
+      { event: emptied, relayUrl: 'wss://a' },
+      { event: small, relayUrl: 'wss://a' }
+    ])
+    expect(result.recommended?.event.id).toBe(small.id)
+  })
+
+  it("measures a settled clobber from its episode's last drop", () => {
+    const hour = 60 * 60
+    const full = followListEvent(100, 0)
+    const events = [
+      full,
+      followListEvent(10, hour),
+      // Edits on the clobbered list, then a second drop the same day: one episode
+      ...[2, 3, 4, 5, 6].map((h) => followListEvent(12, h * hour)),
+      followListEvent(2, 7 * hour),
+      followListEvent(3, 8 * 24 * hour)
+    ]
+    const result = rankLazarusCandidates(
+      LAZARUS_REGISTRY[3],
+      events.map((event) => ({ event, relayUrl: 'wss://a' }))
+    )
+    // One version follows the episode's last drop, so it isn't settled
+    expect(result.recommended?.event.id).toBe(full.id)
+  })
+
+  it('leaves versions of unknown size out of drops, and never recommends one', () => {
+    // 50 public mutes, and private ones that can be neither decrypted nor sized
+    const unsizable = { ...muteListEvent(50, 1000), content: 'A'.repeat(133) }
+    const current = muteListEvent(10, 2000)
+    const rank = (...events: Event[]) =>
+      rankLazarusCandidates(
+        LAZARUS_REGISTRY[10000],
+        events.map((event) => ({ event, relayUrl: 'wss://a' }))
+      )
+    expect(rank(current, unsizable).recommended).toBeUndefined()
+    // Consecutive means consecutive among versions of known size
+    const full = muteListEvent(50, 500)
+    expect(rank(current, unsizable, full).recommended?.event.id).toBe(full.id)
+  })
+
   it('recommends nothing for meaningful-empty kinds and requires intent', () => {
     const keys = {
       ...makeEvent({ kind: 10044, created_at: 1000 }),
-      tags: [['p', 'encryption-pubkey-1']]
+      tags: [['n', 'encryption-pubkey-1']]
     } as Event
     const emptied = { ...makeEvent({ kind: 10044, created_at: 2000 }), tags: [] } as Event
     const result = rankLazarusCandidates(LAZARUS_REGISTRY[10044], [
@@ -400,16 +521,150 @@ describe('computeLazarusDelta', () => {
   })
 })
 
+describe('computeLazarusDelta items', () => {
+  it('counts a duplicated tag once, and ignores tags that are not items', () => {
+    const current = {
+      ...makeEvent({ kind: 3 }),
+      tags: [
+        ['p', 'a'],
+        ['p', 'a'],
+        ['client', 'x']
+      ]
+    } as Event
+    const chosen = {
+      ...makeEvent({ kind: 3 }),
+      tags: [['p', 'a'], ['p'], ['client', 'y']]
+    } as Event
+    const delta = computeLazarusDelta(chosen, current)
+    expect(delta.addedCount).toBe(0)
+    expect(delta.removedCount).toBe(0)
+  })
+
+  it('compares relay URLs normalized', () => {
+    const relayList = (url: string) =>
+      ({ ...makeEvent({ kind: 10002 }), tags: [['r', url, 'write']] }) as Event
+    const delta = computeLazarusDelta(
+      relayList('wss://relay.example'),
+      relayList('wss://Relay.Example/')
+    )
+    expect(delta.addedCount + delta.removedCount).toBe(0)
+  })
+
+  it('counts removed profile fields toward a shrink', () => {
+    const profile = (fields: object) =>
+      ({ ...makeEvent({ kind: 0 }), content: JSON.stringify(fields) }) as Event
+    const delta = computeLazarusDelta(
+      profile({ name: 'a' }),
+      profile({ name: 'b', about: 'c', lud16: 'd@e.f' })
+    )
+    expect(delta.removedCount).toBe(2)
+    expect(delta.needsShrinkConfirmation).toBe(true)
+  })
+})
+
 describe('computeLazarusProfileChanges', () => {
+  const profileEvent = (content: object, tags: string[][] = []) =>
+    ({ ...makeEvent({ kind: 0 }), content: JSON.stringify(content), tags }) as Event
+
   it('lists only the profile fields that change', () => {
-    const profileEvent = (content: object) =>
-      ({ ...makeEvent({ kind: 0 }), content: JSON.stringify(content) }) as Event
     const current = profileEvent({ name: 'clobbered', about: 'same' })
     const chosen = profileEvent({ name: 'Daniel', about: 'same', picture: 'https://pic' })
     expect(computeLazarusProfileChanges(chosen, current)).toEqual([
       { field: 'name', from: 'clobbered', to: 'Daniel' },
       { field: 'picture', from: undefined, to: 'https://pic' }
     ])
+  })
+
+  it('covers every field and tag a restore would replace', () => {
+    const current = profileEvent({ name: 'same', pronouns: 'they/them' }, [
+      ['emoji', 'wave', 'https://wave']
+    ])
+    const chosen = profileEvent({ name: 'same', bot: false })
+    expect(computeLazarusProfileChanges(chosen, current)).toEqual([
+      { field: 'bot', from: undefined, to: 'false' },
+      { field: 'pronouns', from: 'they/them', to: undefined },
+      { field: 'emoji tags', from: 'wave https://wave', to: undefined }
+    ])
+  })
+
+  it('ignores tag order', () => {
+    const tags = [
+      ['emoji', 'a', 'https://a'],
+      ['emoji', 'b', 'https://b']
+    ]
+    const current = profileEvent({ name: 'same' }, tags)
+    const chosen = profileEvent({ name: 'same' }, [...tags].reverse())
+    expect(computeLazarusProfileChanges(chosen, current)).toEqual([])
+  })
+})
+
+describe('checkLazarusCurrent', () => {
+  // Explicit ids: makeEvent's padded ids can repeat
+  const version = (id: string, createdAt: number) => ({
+    ...followListEvent(5, createdAt),
+    id: id.padStart(64, '0')
+  })
+  const reviewed = version('c1', 2000)
+  const older = version('c2', 1000)
+  const newer = version('c3', 3000)
+  const answered = (...events: Event[]) => ({ events, answered: true })
+  const unanswered = (...events: Event[]) => ({ events, answered: false })
+
+  it('proceeds over an older copy on the write relays', () => {
+    expect(checkLazarusCurrent(reviewed, older, [answered(older), answered()])).toEqual({
+      status: 'proceed',
+      current: reviewed
+    })
+  })
+
+  it('reports a newer version from a write relay or the local copy as a change', () => {
+    expect(checkLazarusCurrent(reviewed, undefined, [answered(older), answered(newer)])).toEqual({
+      status: 'changed',
+      current: newer
+    })
+    expect(checkLazarusCurrent(reviewed, newer, [answered()])).toEqual({
+      status: 'changed',
+      current: newer
+    })
+    // A relay that sent a newer version and then failed still shows the edit
+    expect(checkLazarusCurrent(reviewed, undefined, [unanswered(newer)])).toEqual({
+      status: 'changed',
+      current: newer
+    })
+  })
+
+  it('reports a version from the same second with a lower id as a change', () => {
+    const lowerId = version('c0', 2000)
+    expect(checkLazarusCurrent(reviewed, undefined, [answered(lowerId)])).toEqual({
+      status: 'changed',
+      current: lowerId
+    })
+    // One with a higher id is the version relays drop
+    expect(checkLazarusCurrent(reviewed, undefined, [answered(version('c9', 2000))])).toEqual({
+      status: 'proceed',
+      current: reviewed
+    })
+  })
+
+  it('treats a version found when none was reviewed as a change', () => {
+    expect(checkLazarusCurrent(undefined, undefined, [answered(older)])).toEqual({
+      status: 'changed',
+      current: older
+    })
+  })
+
+  it('refuses when no write relay answered', () => {
+    expect(checkLazarusCurrent(reviewed, older, [unanswered(older), unanswered()])).toEqual({
+      status: 'unconfirmed'
+    })
+    expect(checkLazarusCurrent(reviewed, undefined, [])).toEqual({ status: 'unconfirmed' })
+  })
+
+  it('counts one empty answer as enough', () => {
+    expect(checkLazarusCurrent(reviewed, undefined, [unanswered(), answered()])).toEqual({
+      status: 'proceed',
+      current: reviewed
+    })
   })
 })
 
@@ -547,7 +802,7 @@ describe('groupLazarusCandidates', () => {
   it('keeps empty versions of meaningful-empty kinds, where empty is a valid option', () => {
     const events = [1000, 1001].map((createdAt, i) => ({
       ...makeEvent({ created_at: createdAt, kind: 10044 }),
-      tags: i === 0 ? [] : [['p', 'a'.repeat(64)]]
+      tags: i === 0 ? [] : [['n', 'a'.repeat(64)]]
     }))
     const scan = rankLazarusCandidates(
       LAZARUS_REGISTRY[10044],
@@ -570,14 +825,70 @@ describe('groupLazarusCandidates', () => {
   })
 })
 
-describe('getLazarusScanRelays', () => {
+/** A relay list as the service returns it once it has found the user's kind 10002. */
+function relayListOf(write: string[], read: string[] = []) {
+  return {
+    write,
+    read,
+    originalRelays: [...write, ...read].map((url) => ({ url, scope: 'both' as const }))
+  }
+}
+
+type RelayHandlers = {
+  onevent?: (event: Event) => void
+  oneose?: () => void
+  onclose?: (reason: string) => void
+  eoseTimeout?: number
+}
+
+/**
+ * Relays answer through the pool, the way the scan asks them: `respond` plays
+ * each relay's side of a request, a microtask after it's made. Relays in
+ * `refuse` refuse the connection.
+ */
+function relays(
+  respond: (url: string, filter: Filter, handlers: RelayHandlers) => void,
+  { refuse = [] }: { refuse?: string[] } = {}
+) {
+  vi.mocked(client.pool.ensureRelay).mockImplementation(async (url) => {
+    if (refuse.includes(url)) throw new Error('connection refused')
+    return {
+      url,
+      subscribe: (filters: Filter[], handlers: RelayHandlers) => {
+        queueMicrotask(() => respond(url, filters[0], handlers))
+        return { close: () => {} }
+      }
+    } as unknown as IRelay
+  })
+}
+
+/** Every relay answers every request (EOSE), serving `events` whatever the filter. */
+function answerAll(events: Event[] = []) {
+  relays((_url, _filter, handlers) => {
+    events.forEach((event) => handlers.onevent?.(event))
+    handlers.oneose?.()
+  })
+}
+
+/** Every relay refuses the connection. */
+function failAll() {
+  vi.mocked(client.pool.ensureRelay).mockRejectedValue(new Error('connection refused'))
+}
+
+describe('getLazarusScanPlan', () => {
+  afterEach(() => {
+    vi.mocked(client.pool.ensureRelay).mockReset()
+  })
+
   it('scans every user relay, the defaults, and the archival set', async () => {
-    vi.mocked(relayListService.fetchRelayList).mockResolvedValueOnce({
-      write: ['wss://w1/', 'wss://w2/', 'wss://w3/', 'wss://w4/', 'wss://w5/', 'wss://w6/'],
-      read: ['wss://hist.nostr.land/', 'wss://r1/'],
-      originalRelays: []
-    })
-    const relays = await getLazarusScanRelays('pubkey')
+    vi.mocked(relayListService.fetchRelayList).mockResolvedValueOnce(
+      relayListOf(
+        ['wss://w1/', 'wss://w2/', 'wss://w3/', 'wss://w4/', 'wss://w5/', 'wss://w6/'],
+        ['wss://hist.nostr.land/', 'wss://r1/']
+      )
+    )
+    const { relays, relayList } = await getLazarusScanPlan('pubkey')
+    expect(relayList).toBe('found')
     // Past the first five write relays, and read relays too
     expect(relays).toEqual(expect.arrayContaining(['wss://w6/', 'wss://r1/', 'wss://default/']))
     for (const url of LAZARUS_ARCHIVAL_RELAYS) {
@@ -588,21 +899,52 @@ describe('getLazarusScanRelays', () => {
     expect(new Set(relays).size).toBe(relays.length)
   })
 
-  it('still scans the default and archival sets without a relay list', async () => {
+  it('looks the relay list up itself when the service has none, taking the newest', async () => {
     vi.mocked(relayListService.fetchRelayList).mockRejectedValueOnce(new Error('offline'))
-    const relays = await getLazarusScanRelays('pubkey')
-    expect(relays).toContain('wss://default/')
-    expect(relays).toContain('wss://hist.nostr.land/')
+    const relayListEvent = (id: string, createdAt: number, url: string) => ({
+      ...makeEvent({ kind: 10002, created_at: createdAt }),
+      id: id.padStart(64, '0'),
+      tags: [['r', url, 'write']]
+    })
+    answerAll([relayListEvent('b1', 1000, 'wss://old/'), relayListEvent('b2', 2000, 'wss://new/')])
+    const plan = await getLazarusScanPlan('test-pubkey')
+    expect(plan.relayList).toBe('found')
+    expect(plan.write).toEqual(['wss://new/'])
+  })
+
+  it('lets the defaults stand in when relays answered without a relay list', async () => {
+    vi.mocked(relayListService.fetchRelayList).mockRejectedValueOnce(new Error('offline'))
+    answerAll()
+    const plan = await getLazarusScanPlan('pubkey')
+    expect(plan.relayList).toBe('missing')
+    expect(plan.write).toEqual(['wss://default/'])
+    expect(plan.relays).toContain('wss://hist.nostr.land/')
+  })
+
+  it('never substitutes the defaults when every relay refuses the lookup', async () => {
+    vi.mocked(relayListService.fetchRelayList).mockRejectedValueOnce(new Error('offline'))
+    failAll()
+    const plan = await getLazarusScanPlan('pubkey')
+    expect(plan.relayList).toBe('unknown')
+    expect(plan.write).toEqual([])
+    // The default and archival sets are still scanned
+    expect(plan.relays).toContain('wss://default/')
+    expect(plan.relays).toContain('wss://hist.nostr.land/')
   })
 })
 
 describe('getLazarusPublishRelays', () => {
+  afterEach(() => {
+    vi.mocked(client.pool.ensureRelay).mockReset()
+  })
+
   it('judges success on the write relays and sends the rest as extras', async () => {
-    vi.mocked(relayListService.fetchRelayList).mockResolvedValueOnce({
-      write: ['wss://w1/', 'wss://w2/', 'wss://w3/', 'wss://w4/', 'wss://w5/', 'wss://w6/'],
-      read: ['wss://r1/'],
-      originalRelays: []
-    })
+    vi.mocked(relayListService.fetchRelayList).mockResolvedValueOnce(
+      relayListOf(
+        ['wss://w1/', 'wss://w2/', 'wss://w3/', 'wss://w4/', 'wss://w5/', 'wss://w6/'],
+        ['wss://r1/']
+      )
+    )
     const relays = await getLazarusPublishRelays('pubkey', ['wss://hist.nostr.land', 'wss://w1/'])
     expect(relays).toEqual({
       write: ['wss://w1/', 'wss://w2/', 'wss://w3/', 'wss://w4/', 'wss://w5/', 'wss://w6/'],
@@ -610,12 +952,38 @@ describe('getLazarusPublishRelays', () => {
     })
   })
 
-  it('falls back to the default relays without a relay list', async () => {
+  it('falls back to the default relays when the user has no relay list', async () => {
     vi.mocked(relayListService.fetchRelayList).mockRejectedValueOnce(new Error('offline'))
+    answerAll()
     expect(await getLazarusPublishRelays('pubkey', ['wss://a/'])).toEqual({
       write: ['wss://default/'],
       extra: ['wss://a/']
     })
+  })
+})
+
+describe('publishLazarusRecovery', () => {
+  const event = followListEvent(3, 1000)
+
+  afterEach(() => {
+    vi.mocked(client.publishEvent).mockReset()
+  })
+
+  it('succeeds when one write relay accepts, short of the client threshold', async () => {
+    vi.mocked(client.publishEvent).mockRejectedValueOnce(
+      new AggregateError([new Error('wss://w2/: blocked'), new Error('wss://w3/: blocked')])
+    )
+    await expect(
+      publishLazarusRecovery(['wss://w1/', 'wss://w2/', 'wss://w3/'], event)
+    ).resolves.toBeUndefined()
+  })
+
+  it('fails when no write relay accepts', async () => {
+    vi.mocked(client.publishEvent).mockRejectedValueOnce(
+      new AggregateError([new Error('wss://w1/: blocked'), new Error('wss://w2/: blocked')])
+    )
+    await expect(publishLazarusRecovery(['wss://w1/', 'wss://w2/'], event)).rejects.toThrow()
+    await expect(publishLazarusRecovery([], event)).rejects.toThrow()
   })
 })
 
@@ -629,21 +997,18 @@ describe('relay queries', () => {
   }))
   const profile = getLazarusKindProfile(3)!
 
-  // Relays answer through client.subscribe; this one serves a fixed history
+  // This relay serves a fixed history; every other relay answers with nothing
   const serve = (relay: string, events: Event[], honorUntil = true) =>
-    vi.mocked(client.subscribe).mockImplementation((urls, filter, handlers) => {
+    relays((url, filter, handlers) => {
       const { until, limit = 50 } = filter as { until?: number; limit?: number }
-      queueMicrotask(() => {
-        if (urls[0] === relay) {
-          events
-            .filter((event) => !honorUntil || until === undefined || event.created_at <= until)
-            .sort((a, b) => b.created_at - a.created_at)
-            .slice(0, limit)
-            .forEach((event) => handlers.onevent?.(event))
-        }
-        handlers.oneose?.(true)
-      })
-      return { close: () => {} }
+      if (url === relay) {
+        events
+          .filter((event) => !honorUntil || until === undefined || event.created_at <= until)
+          .sort((a, b) => b.created_at - a.created_at)
+          .slice(0, limit)
+          .forEach((event) => handlers.onevent?.(event))
+      }
+      handlers.oneose?.()
     })
 
   beforeEach(() => {
@@ -656,7 +1021,8 @@ describe('relay queries', () => {
 
   afterEach(() => {
     vi.mocked(relayListService.fetchRelayList).mockReset()
-    vi.mocked(client.subscribe).mockReset()
+    vi.mocked(client.pool.ensureRelay).mockReset()
+    vi.mocked(client.getSignerFor).mockReset()
   })
 
   it('pages back from relays that filled a page', async () => {
@@ -683,37 +1049,201 @@ describe('relay queries', () => {
     expect(older.olderCursors).toEqual({})
   })
 
-  it('closes relay subscriptions that time out', async () => {
+  it('closes relay subscriptions that time out, and fails a scan no relay answered', async () => {
     vi.useFakeTimers()
     try {
       const close = vi.fn()
-      vi.mocked(client.subscribe).mockImplementation(() => ({ close }))
+      const subscribe = vi.fn(() => ({ close }))
+      vi.mocked(client.pool.ensureRelay).mockImplementation(
+        async (url) => ({ url, subscribe }) as unknown as IRelay
+      )
       const pending = scanLazarusKind(3, 'test-pubkey')
-      await vi.advanceTimersByTimeAsync(6000)
-      const scan = await pending
-      expect(scan.respondingRelays).toEqual([])
-      expect(close).toHaveBeenCalledTimes(scan.queriedRelays.length)
+      // Attach the rejection handler before the timers fire
+      const failed = expect(pending).rejects.toThrow('No relay answered the scan')
+      // The relay list lookup times out, then the scan
+      await vi.advanceTimersByTimeAsync(12000)
+      await failed
+      expect(subscribe).toHaveBeenCalled()
+      expect(close).toHaveBeenCalledTimes(subscribe.mock.calls.length)
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it('finds the newest version on the write relays before a restore', async () => {
-    vi.mocked(relayListService.fetchRelayList).mockResolvedValue({
-      write: ['wss://w1/', 'wss://w2/'],
-      read: [],
-      originalRelays: []
+  it('times a silent relay out before its own EOSE timeout can report an answer', async () => {
+    vi.useFakeTimers()
+    try {
+      // Like nostr-tools, a relay subscription reports EOSE by itself once its
+      // timeout passes, whether or not the relay sent one
+      vi.mocked(client.pool.ensureRelay).mockImplementation(
+        async (url) =>
+          ({
+            url,
+            subscribe: (_filters: Filter[], handlers: RelayHandlers) => {
+              const timer = setTimeout(() => handlers.oneose?.(), handlers.eoseTimeout ?? 4400)
+              return { close: () => clearTimeout(timer) }
+            }
+          }) as unknown as IRelay
+      )
+      const pending = scanLazarusKind(3, 'test-pubkey')
+      const failed = expect(pending).rejects.toThrow('No relay answered the scan')
+      await vi.advanceTimersByTimeAsync(12000)
+      await failed
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('records how each relay ended, keeping versions sent before a failure', async () => {
+    vi.mocked(relayListService.fetchRelayList).mockResolvedValue(relayListOf(['wss://w1/']))
+    const partial = { ...followListEvent(5, 1000), id: 'p1'.padStart(64, '0') }
+    relays(
+      (url, _filter, handlers) => {
+        if (url === HISTORY_RELAY) {
+          // Sends a version, then its connection drops before EOSE
+          handlers.onevent?.(partial)
+          return handlers.onclose?.('relay connection closed')
+        }
+        // Asks to authenticate, with no signer to do it
+        if (url === 'wss://w1/') return handlers.onclose?.('auth-required: sign in')
+        if (url === 'wss://nostr.mom/') return handlers.onclose?.('blocked: rate limited')
+        handlers.oneose?.()
+      },
+      { refuse: ['wss://purplepag.es/'] }
+    )
+    const scan = await scanLazarusKind(3, 'test-pubkey')
+    expect(scan.candidates.map((c) => c.event.id)).toEqual([partial.id])
+    expect(scan.relayOutcomes?.[HISTORY_RELAY]).toBe('failed')
+    expect(scan.relayOutcomes?.['wss://w1/']).toBe('failed')
+    // A CLOSED before EOSE, and a refused connection, are failures, never empty answers
+    expect(scan.relayOutcomes?.['wss://nostr.mom/']).toBe('failed')
+    expect(scan.relayOutcomes?.['wss://purplepag.es/']).toBe('failed')
+    expect(scan.relayOutcomes?.['wss://nos.lol/']).toBe('answered')
+    // The only write relay failed, so current is unconfirmed
+    expect(scan.currentConfirmed).toBe(false)
+    expect(lazarusScanReachedNoRelay(scan)).toBe(false)
+  })
+
+  it('authenticates only to relays in the user list', async () => {
+    vi.mocked(relayListService.fetchRelayList).mockResolvedValue(relayListOf(['wss://w1/']))
+    const signer = { signEvent: vi.fn(async (event: EventTemplate) => ({ ...event, sig: 'auth' })) }
+    vi.mocked(client.getSignerFor).mockReturnValue(signer as never)
+    const authenticated = new Set<string>()
+    vi.mocked(client.pool.ensureRelay).mockImplementation(
+      async (url) =>
+        ({
+          url,
+          auth: async (sign: (event: EventTemplate) => Promise<unknown>) => {
+            await sign({ kind: 22242, created_at: 0, tags: [], content: '' })
+            authenticated.add(url)
+          },
+          subscribe: (_filters: Filter[], handlers: RelayHandlers) => {
+            queueMicrotask(() => {
+              // The user's own relay and an archival one both require authentication
+              const restricted = url === 'wss://w1/' || url === HISTORY_RELAY
+              if (restricted && !authenticated.has(url)) {
+                return handlers.onclose?.('auth-required: sign in')
+              }
+              handlers.oneose?.()
+            })
+            return { close: () => {} }
+          }
+        }) as unknown as IRelay
+    )
+    const scan = await scanLazarusKind(3, 'test-pubkey')
+    expect([...authenticated]).toEqual(['wss://w1/'])
+    expect(signer.signEvent).toHaveBeenCalledTimes(1)
+    expect(scan.relayOutcomes?.['wss://w1/']).toBe('answered')
+    expect(scan.relayOutcomes?.[HISTORY_RELAY]).toBe('failed')
+    expect(scan.currentConfirmed).toBe(true)
+  })
+
+  it('recommends nothing while no write relay answered', async () => {
+    vi.mocked(relayListService.fetchRelayList).mockResolvedValue(relayListOf(['wss://w1/']))
+    // A clear clobber on the history relay: 40 follows, then 3
+    const full = { ...followListEvent(40, 1000), id: 'd1'.padStart(64, '0') }
+    const clobbered = { ...followListEvent(3, 2000), id: 'd2'.padStart(64, '0') }
+    const serveClobber = (writeRelayAnswers: boolean) =>
+      relays(
+        (url, _filter, handlers) => {
+          if (url === HISTORY_RELAY) [full, clobbered].forEach((e) => handlers.onevent?.(e))
+          handlers.oneose?.()
+        },
+        { refuse: writeRelayAnswers ? [] : ['wss://w1/'] }
+      )
+    serveClobber(true)
+    expect((await scanLazarusKind(3, 'test-pubkey')).recommended?.event.id).toBe(full.id)
+    serveClobber(false)
+    const unconfirmed = await scanLazarusKind(3, 'test-pubkey')
+    expect(unconfirmed.currentConfirmed).toBe(false)
+    expect(unconfirmed.recommended).toBeUndefined()
+  })
+
+  it('shows versions that arrived even when no relay answered', async () => {
+    vi.mocked(relayListService.fetchRelayList).mockResolvedValue(relayListOf(['wss://w1/']))
+    const partial = { ...followListEvent(5, 1000), id: 'e1'.padStart(64, '0') }
+    relays((url, _filter, handlers) => {
+      if (url === HISTORY_RELAY) handlers.onevent?.(partial)
+      handlers.onclose?.('relay connection closed')
     })
-    const older = followListEvent(5, 1000)
-    const newer = followListEvent(6, 2000)
-    vi.mocked(client.subscribe).mockImplementation((urls, _filter, handlers) => {
-      queueMicrotask(() => {
-        handlers.onevent?.(urls[0] === 'wss://w1/' ? older : newer)
-        handlers.oneose?.(true)
+    const scan = await scanLazarusKind(3, 'test-pubkey')
+    expect(scan.candidates.map((c) => c.event.id)).toEqual([partial.id])
+    expect(lazarusScanReachedNoRelay(scan)).toBe(true)
+  })
+
+  it('counts only valid versions of the list from each relay', async () => {
+    vi.mocked(verifyEvent).mockImplementation((event) => event.sig !== 'forged')
+    try {
+      const version = (id: string, overrides: Partial<Event> = {}) => ({
+        ...followListEvent(5, 1000),
+        id: id.padStart(64, '0'),
+        ...overrides
       })
-      return { close: () => {} }
-    })
-    expect((await fetchLatestLazarusVersion(3, 'test-pubkey'))?.id).toBe(newer.id)
+      const valid = version('v1')
+      const foreign = version('v2', { pubkey: 'someone-else' })
+      const wrongKind = version('v3', { kind: 10000 })
+      // A full page of forged versions must not count or move a cursor
+      const forged = Array.from({ length: 50 }, (_, i) =>
+        version(`f${i}`, { sig: 'forged', created_at: 900 + i })
+      )
+      relays((url, _filter, handlers) => {
+        const events =
+          url === HISTORY_RELAY
+            ? [valid, foreign, wrongKind]
+            : url === 'wss://nos.lol/'
+              ? forged
+              : []
+        events.forEach((event) => handlers.onevent?.(event))
+        handlers.oneose?.()
+      })
+      const scan = await scanLazarusKind(3, 'test-pubkey')
+      expect(scan.candidates.map((c) => c.event.id)).toEqual([valid.id])
+      expect(scan.respondingRelays).toEqual([HISTORY_RELAY])
+      expect(scan.olderCursors).toEqual({})
+    } finally {
+      vi.mocked(verifyEvent).mockImplementation(() => true)
+    }
+  })
+
+  it('reads every write relay before a restore, telling failed reads from empty ones', async () => {
+    vi.mocked(relayListService.fetchRelayList).mockResolvedValue(
+      relayListOf(['wss://w1/', 'wss://w2/', 'wss://w3/'])
+    )
+    const newer = followListEvent(6, 2000)
+    const foreign = { ...followListEvent(6, 3000), pubkey: 'someone-else' }
+    // w3 refuses the connection, so it sends nothing and doesn't answer
+    relays(
+      (url, _filter, handlers) => {
+        handlers.onevent?.(url === 'wss://w1/' ? foreign : newer)
+        handlers.oneose?.()
+      },
+      { refuse: ['wss://w3/'] }
+    )
+    expect(await readLazarusCurrent(3, 'test-pubkey')).toEqual([
+      { events: [], answered: true },
+      { events: [newer], answered: true },
+      { events: [], answered: false }
+    ])
   })
 })
 
@@ -838,5 +1368,32 @@ describe('private items', () => {
     const current = privateMuteListEvent(privateTags(3), 2000)
     const chosen = privateMuteListEvent(privateTags(5), 1000)
     expect(computeLazarusDelta(chosen, current).privateUnknown).toBe(true)
+  })
+
+  it('says which side has private items that were not decrypted', () => {
+    const encrypted = privateMuteListEvent(privateTags(3), 2000)
+    const plain = { ...muteListEvent(0, 1000), tags: [['p', 'x']] }
+    const overEncrypted = computeLazarusDelta(plain, encrypted)
+    expect(overEncrypted.privateUnknownCurrent).toBe(true)
+    expect(overEncrypted.privateUnknownChosen).toBe(false)
+    // It adds an item, but replaces private items nobody counted
+    expect(overEncrypted.shrinks).toBe(false)
+    expect(overEncrypted.needsShrinkConfirmation).toBe(true)
+    const restoringEncrypted = computeLazarusDelta(encrypted, plain)
+    expect(restoringEncrypted.privateUnknownChosen).toBe(true)
+    expect(restoringEncrypted.privateUnknownCurrent).toBe(false)
+  })
+
+  it('treats identical encrypted content as the same private items', () => {
+    const tags = privateTags(4)
+    const current = privateMuteListEvent(tags, 2000)
+    const chosen = { ...current, id: 'f'.repeat(64), created_at: 1000, tags: [['p', 'x']] }
+    const delta = computeLazarusDelta(chosen, current)
+    expect(delta.privateUnknown).toBe(false)
+    expect(delta.needsShrinkConfirmation).toBe(false)
+    // Decrypting either one covers both
+    const decrypted = computeLazarusDelta(chosen, current, new Map([[current.id, tags]]))
+    expect(decrypted.added).toEqual([['p', 'x']])
+    expect(decrypted.removedCount).toBe(0)
   })
 })

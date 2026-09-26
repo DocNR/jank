@@ -875,8 +875,8 @@ export default {
     'Invalid npub': 'Invalid npub',
     'Already paired as {{name}}': 'Already paired as {{name}}',
     'this agent': 'this agent',
-    "Get your agent's npub from your runtime's startup output (e.g. Claude Agent SDK + ContextVM Proxy CLI prints \"agent npub: npub1...\"; other MCP-over-Nostr runtimes use similar formats)":
-      "Get your agent's npub from your runtime's startup output (e.g. Claude Agent SDK + ContextVM Proxy CLI prints \"agent npub: npub1...\"; other MCP-over-Nostr runtimes use similar formats)",
+    'Get your agent\'s npub from your runtime\'s startup output (e.g. Claude Agent SDK + ContextVM Proxy CLI prints "agent npub: npub1..."; other MCP-over-Nostr runtimes use similar formats)':
+      'Get your agent\'s npub from your runtime\'s startup output (e.g. Claude Agent SDK + ContextVM Proxy CLI prints "agent npub: npub1..."; other MCP-over-Nostr runtimes use similar formats)',
     'Display name (optional)': 'Display name (optional)',
     'e.g. Claude on my laptop': 'e.g. Claude on my laptop',
     'Scope: Read-only': 'Scope: Read-only',
@@ -904,8 +904,7 @@ export default {
       'Allow agents to see your other paired accounts',
     "On: agents see columns that reference your other paired accounts' npubs.":
       "On: agents see columns that reference your other paired accounts' npubs.",
-    'Off (default): agents only see this account.':
-      'Off (default): agents only see this account.',
+    'Off (default): agents only see this account.': 'Off (default): agents only see this account.',
     'Allow sibling exposure?': 'Allow sibling exposure?',
     'Agents paired to this account will be able to see:':
       'Agents paired to this account will be able to see:',
@@ -913,8 +912,7 @@ export default {
       'Columns in this deck that view your other paired jank accounts (their npubs become visible to the agent)',
     'This does NOT change what events the agent can publish (still none) or what other accounts the agent can read directly (still just this one).':
       'This does NOT change what events the agent can publish (still none) or what other accounts the agent can read directly (still just this one).',
-    'You can turn this off again at any time.':
-      'You can turn this off again at any time.',
+    'You can turn this off again at any time.': 'You can turn this off again at any time.',
     'Allow exposure': 'Allow exposure',
     'Relatr Discovery': 'Relatr Discovery',
     'Topic to discover': 'Topic to discover',
@@ -1011,8 +1009,7 @@ export default {
     'Message your agent…': 'Message your agent…',
     'Sign in to chat with your agent': 'Sign in to chat with your agent',
     'Loading conversation…': 'Loading conversation…',
-    'No messages yet. Say hello to your agent.':
-      'No messages yet. Say hello to your agent.',
+    'No messages yet. Say hello to your agent.': 'No messages yet. Say hello to your agent.',
     'Could not load conversation': 'Could not load conversation',
     'Message failed to send': 'Message failed to send',
     'Agent chat npub (optional)': 'Agent chat npub (optional)',
@@ -1157,8 +1154,6 @@ export default {
     '{{count}} items would be removed_other': '{{count}} items would be removed',
     'This restores fewer items than you have now. It will also re-apply moderation from that version for mute lists.':
       'This restores fewer items than you have now. It will also re-apply moderation from that version for mute lists.',
-    'Private items in one of these versions could not be decrypted, so the changes above cover public items only. By size, the selected version has {{chosen}} items and your current one has {{current}}.':
-      'Private items in one of these versions could not be decrypted, so the changes above cover public items only. By size, the selected version has {{chosen}} items and your current one has {{current}}.',
     'This version is too large to sign with a remote signer: NIP-46 requests are limited to 64 KB. Large lists, like a mute list with many private items or a big follow list, can only be restored with a browser extension signer (NIP-07) or a local key.':
       'This version is too large to sign with a remote signer: NIP-46 requests are limited to 64 KB. Large lists, like a mute list with many private items or a big follow list, can only be restored with a browser extension signer (NIP-07) or a local key.',
     'Accounts present now but missing from the restored version would be unmuted.':
@@ -1188,6 +1183,37 @@ export default {
       'Your list changed since this review, so the changes above now compare against the newest version. Check them and restore again.',
     'No profile fields would change.': 'No profile fields would change.',
     'If another client clobbered your follows, mutes, profile, or bookmarks, scan relay history to find and restore an older version':
-      'If another client clobbered your follows, mutes, profile, or bookmarks, scan relay history to find and restore an older version'
+      'If another client clobbered your follows, mutes, profile, or bookmarks, scan relay history to find and restore an older version',
+    'Could not reach your write relays to confirm the current version. Nothing was published.':
+      'Could not reach your write relays to confirm the current version. Nothing was published.',
+    '{{answered}} of {{queried}} relays answered': '{{answered}} of {{queried}} relays answered',
+    Answered: 'Answered',
+    Failed: 'Failed',
+    'Timed out': 'Timed out',
+    'No relay finished answering, so these versions may be incomplete. Scan again to retry.':
+      'No relay finished answering, so these versions may be incomplete. Scan again to retry.',
+    'Could not fetch your relay list, so the newest version found may not be current and nothing is recommended. Scan again to retry.':
+      'Could not fetch your relay list, so the newest version found may not be current and nothing is recommended. Scan again to retry.',
+    'None of your write relays answered, so the newest version found may not be current and nothing is recommended. Scan again to retry.':
+      'None of your write relays answered, so the newest version found may not be current and nothing is recommended. Scan again to retry.',
+    'No relay list found for this account, so the default relays stand in as its write relays.':
+      'No relay list found for this account, so the default relays stand in as its write relays.',
+    'No versions found. The relays that answered may have no history of this list.':
+      'No versions found. The relays that answered may have no history of this list.',
+    'No recoverable improvement found.': 'No recoverable improvement found.',
+    'Private items in the selected version could not be decrypted, so the changes above leave them out. By size, it has {{size}} items.':
+      'Private items in the selected version could not be decrypted, so the changes above leave them out. By size, it has {{size}} items.',
+    'Private items in your current version could not be decrypted, so the changes above leave them out. The restore replaces them, so it may remove items no count shows. By size, your current version has {{size}} items.':
+      'Private items in your current version could not be decrypted, so the changes above leave them out. The restore replaces them, so it may remove items no count shows. By size, your current version has {{size}} items.',
+    'This restores your NIP-4e encryption keys. Clients will encrypt direct messages to them again.':
+      'This restores your NIP-4e encryption keys. Clients will encrypt direct messages to them again.',
+    'This announces that you no longer use NIP-4e; clients stop encrypting direct messages to your keys.':
+      'This announces that you no longer use NIP-4e; clients stop encrypting direct messages to your keys.',
+    'The current empty state announces that you do not use NIP-4e.':
+      'The current empty state announces that you do not use NIP-4e.',
+    'Your current version lists keys that clients encrypt direct messages to.':
+      'Your current version lists keys that clients encrypt direct messages to.',
+    'I intend this change': 'I intend this change',
+    'I understand this can remove items I have now': 'I understand this can remove items I have now'
   }
 }

@@ -11,6 +11,7 @@ import {
   TriangleAlert
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import SecondaryPageLayout from '@/layouts/SecondaryPageLayout'
 import { fitsNip46Request } from '@/lib/nip46'
 import { useNostr } from '@/providers/NostrProvider'
@@ -29,9 +31,9 @@ import indexedDb from '@/services/indexed-db.service'
 import {
   applyLazarusPrivateTags,
   buildLazarusRecoveryDraft,
+  checkLazarusCurrent,
   computeLazarusDelta,
   computeLazarusProfileChanges,
-  fetchLatestLazarusVersion,
   fitsLazarusRemoteRestore,
   getContentEncryption,
   getLazarusItemRange,
@@ -39,8 +41,11 @@ import {
   getLazarusPublishRelays,
   groupLazarusCandidates,
   isPastEmptyVersion,
+  lazarusScanReachedNoRelay,
   loadOlderLazarusVersions,
   parsePrivateTags,
+  publishLazarusRecovery,
+  readLazarusCurrent,
   scanLazarusKind,
   sortLazarusCandidates,
   type LazarusCandidate,
@@ -66,6 +71,15 @@ function formatTimestamp(seconds: number): string {
 
 function formatDate(seconds: number): string {
   return dayjs.unix(seconds).format('YYYY-MM-DD')
+}
+
+function ScanNotice({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-2 flex items-start gap-2 rounded-md border p-2 text-xs">
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{children}</span>
+    </div>
+  )
 }
 
 function formatItemRange(itemCount: LazarusItemCount): string {
@@ -200,6 +214,10 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
     | undefined
   >()
   const [recovering, setRecovering] = useState(false)
+  // Separate confirmations for a restore that removes items, and for one
+  // whose empty state has a meaning of its own (kind 10044)
+  const [shrinkConfirmed, setShrinkConfirmed] = useState(false)
+  const [intentConfirmed, setIntentConfirmed] = useState(false)
   const [privateTags, setPrivateTags] = useState<Map<string, string[][]>>(new Map())
   const [privateItemsNotes, setPrivateItemsNotes] = useState<Record<string, PrivateItemsNote>>({})
   const [decryptingIds, setDecryptingIds] = useState<Set<string>>(new Set())
@@ -208,6 +226,7 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
   const [sortBy, setSortBy] = useState<LazarusSortOrder>('date')
   const [preparingReview, setPreparingReview] = useState<string>()
   const [showEmpty, setShowEmpty] = useState(false)
+  const [showRelays, setShowRelays] = useState(false)
   // Bumped whenever a new scan starts, so a slow decryption can't land on a newer scan
   const scanIdRef = useRef(0)
   // The latest decrypted private items and notes, so decryptions that finish
@@ -372,6 +391,13 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
     }
   }, [scrollContainer])
 
+  // A confirmation belongs to the review it was given in: a new review, or
+  // one compared again against a newer version, asks again
+  useEffect(() => {
+    setShrinkConfirmed(false)
+    setIntentConfirmed(false)
+  }, [pending])
+
   // A scan belongs to the account it ran for, so switching accounts starts over
   useEffect(() => {
     scanIdRef.current += 1
@@ -415,7 +441,7 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
     setDecryptingIds(new Set())
     setExpandedGroups(new Set())
     setShowEmpty(false)
-    setShowEmpty(false)
+    setShowRelays(false)
     setLoadingOlder(false)
     try {
       const result = await scanLazarusKind(kind, pubkey)
@@ -555,26 +581,31 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
     try {
       // The list may have changed since the review opened (another column,
       // device or client), and restoring over it would drop those edits
-      const [onRelays, stored] = await Promise.all([
-        fetchLatestLazarusVersion(chosen.kind, pubkey),
+      const [answers, stored] = await Promise.all([
+        readLazarusCurrent(chosen.kind, pubkey),
         indexedDb.getReplaceableEvent(pubkey, chosen.kind)
       ])
-      let latest = pending.current
-      for (const event of [onRelays, stored]) {
-        if (event && (!latest || event.created_at > latest.created_at)) latest = event
-      }
-      if (latest && latest.id !== pending.current?.id) {
-        await reviewAgainst(latest)
+      const check = checkLazarusCurrent(pending.current, stored ?? undefined, answers)
+      if (check.status === 'unconfirmed') {
+        toast.error(
+          t(
+            'Could not reach your write relays to confirm the current version. Nothing was published.'
+          )
+        )
         return
       }
-      const draft = buildLazarusRecoveryDraft(chosen, { current: latest })
+      if (check.status === 'changed') {
+        await reviewAgainst(check.current)
+        return
+      }
+      const draft = buildLazarusRecoveryDraft(chosen, { current: check.current })
       const signed = await signEvent(draft)
       if (signed.pubkey !== chosen.pubkey) {
         toast.error(t('This version belongs to another account. Switch back to it to restore.'))
         return
       }
       const { write, extra } = await getLazarusPublishRelays(pubkey, scan?.respondingRelays ?? [])
-      await client.publishEvent(write, signed)
+      await publishLazarusRecovery(write, signed)
       // The other relays that answered hold older copies of the list; replace
       // them where they accept it, without holding up the result
       if (extra.length > 0) client.publishEvent(extra, signed).catch(() => {})
@@ -713,12 +744,72 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
         )}
         {phase === 'done' && scan && (
           <div className="px-4">
+            {scan.relayOutcomes && (
+              <div className="text-muted-foreground mb-2 text-xs">
+                <button
+                  type="button"
+                  className="hover:text-foreground flex items-center gap-1"
+                  onClick={() => setShowRelays((shown) => !shown)}
+                >
+                  {t('{{answered}} of {{queried}} relays answered', {
+                    answered: Object.values(scan.relayOutcomes).filter(
+                      (outcome) => outcome === 'answered'
+                    ).length,
+                    queried: scan.queriedRelays.length
+                  })}
+                  {showRelays ? (
+                    <ChevronUp className="size-3.5" />
+                  ) : (
+                    <ChevronDown className="size-3.5" />
+                  )}
+                </button>
+                {showRelays && (
+                  <ul className="mt-1 space-y-0.5">
+                    {scan.queriedRelays.map((url) => (
+                      <li key={url} className="flex justify-between gap-2">
+                        <span className="truncate">{url}</span>
+                        <span className="shrink-0">
+                          {scan.relayOutcomes?.[url] === 'answered'
+                            ? t('Answered')
+                            : scan.relayOutcomes?.[url] === 'timed-out'
+                              ? t('Timed out')
+                              : t('Failed')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            {lazarusScanReachedNoRelay(scan) ? (
+              <ScanNotice>
+                {t(
+                  'No relay finished answering, so these versions may be incomplete. Scan again to retry.'
+                )}
+              </ScanNotice>
+            ) : (
+              !scan.currentConfirmed && (
+                <ScanNotice>
+                  {scan.relayList === 'unknown'
+                    ? t(
+                        'Could not fetch your relay list, so the newest version found may not be current and nothing is recommended. Scan again to retry.'
+                      )
+                    : t(
+                        'None of your write relays answered, so the newest version found may not be current and nothing is recommended. Scan again to retry.'
+                      )}
+                </ScanNotice>
+              )
+            )}
+            {scan.relayList === 'missing' && (
+              <ScanNotice>
+                {t(
+                  'No relay list found for this account, so the default relays stand in as its write relays.'
+                )}
+              </ScanNotice>
+            )}
             {scan.candidates.length === 0 ? (
               <div className="text-muted-foreground py-2 text-sm">
-                {t(
-                  'No versions found. This scan saw {{queried}} relays and {{responding}} answered, so an empty result may just mean the relays asked had no history.',
-                  { queried: scan.queriedRelays.length, responding: scan.respondingRelays.length }
-                )}
+                {t('No versions found. The relays that answered may have no history of this list.')}
               </div>
             ) : (
               <>
@@ -737,10 +828,17 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
                     {t('Decrypting private items…')}
                   </div>
                 )}
-                {scan.recommended && (
+                {scan.recommended ? (
                   <div className="mb-2 rounded-md border px-2">
                     {renderCandidate(scan.recommended)}
                   </div>
+                ) : (
+                  sortable &&
+                  scan.currentConfirmed && (
+                    <div className="text-muted-foreground mb-2 text-xs">
+                      {t('No recoverable improvement found.')}
+                    </div>
+                  )
                 )}
                 {sortable && scan.candidates.length > 1 && (
                   <div className="text-muted-foreground mb-1 flex items-center justify-end gap-2 text-xs">
@@ -853,20 +951,47 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
                   </span>
                 </div>
               )}
-              {pending.delta.privateUnknown && (
+              {pending.delta.privateUnknownChosen && (
                 <div className="flex items-start gap-2 rounded-md border p-2 text-xs">
                   <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>
                     {t(
-                      'Private items in one of these versions could not be decrypted, so the changes above cover public items only. By size, the selected version has {{chosen}} items and your current one has {{current}}.',
-                      {
-                        chosen: formatItemRange(pending.candidate.itemCount),
-                        current: pending.current
-                          ? formatItemRange(pending.profile.itemCount(pending.current))
-                          : '0'
-                      }
+                      'Private items in the selected version could not be decrypted, so the changes above leave them out. By size, it has {{size}} items.',
+                      { size: formatItemRange(pending.candidate.itemCount) }
                     )}
                   </span>
+                </div>
+              )}
+              {pending.delta.privateUnknownCurrent && pending.current && (
+                <div className="flex items-start gap-2 rounded-md border p-2 text-xs">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    {t(
+                      'Private items in your current version could not be decrypted, so the changes above leave them out. The restore replaces them, so it may remove items no count shows. By size, your current version has {{size}} items.',
+                      { size: formatItemRange(pending.profile.itemCount(pending.current)) }
+                    )}
+                  </span>
+                </div>
+              )}
+              {pending.profile.meaningfulEmpty && (
+                <div className="space-y-1 rounded-md border p-2 text-xs">
+                  <div>
+                    {getLazarusItemRange(pending.candidate.itemCount).max === 0
+                      ? t(
+                          'This announces that you no longer use NIP-4e; clients stop encrypting direct messages to your keys.'
+                        )
+                      : t(
+                          'This restores your NIP-4e encryption keys. Clients will encrypt direct messages to them again.'
+                        )}
+                  </div>
+                  <div className="text-muted-foreground">
+                    {!pending.current ||
+                    getLazarusItemRange(pending.profile.itemCount(pending.current)).max === 0
+                      ? t('The current empty state announces that you do not use NIP-4e.')
+                      : t(
+                          'Your current version lists keys that clients encrypt direct messages to.'
+                        )}
+                  </div>
                 </div>
               )}
               {pending.tooLargeForRemoteSigner && (
@@ -897,6 +1022,26 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
                   {t('This list affects how other accounts interact with you.')}
                 </div>
               )}
+              {pending.profile.meaningfulEmpty && (
+                <Label className="flex cursor-pointer items-center gap-2">
+                  <Checkbox
+                    checked={intentConfirmed}
+                    onCheckedChange={(checked) => setIntentConfirmed(!!checked)}
+                  />
+                  <span className="text-xs">{t('I intend this change')}</span>
+                </Label>
+              )}
+              {pending.delta.needsShrinkConfirmation && (
+                <Label className="flex cursor-pointer items-center gap-2">
+                  <Checkbox
+                    checked={shrinkConfirmed}
+                    onCheckedChange={(checked) => setShrinkConfirmed(!!checked)}
+                  />
+                  <span className="text-xs">
+                    {t('I understand this can remove items I have now')}
+                  </span>
+                </Label>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -905,7 +1050,12 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
             </Button>
             <Button
               onClick={confirmRecovery}
-              disabled={recovering || pending?.tooLargeForRemoteSigner}
+              disabled={
+                recovering ||
+                pending?.tooLargeForRemoteSigner ||
+                (pending?.delta.needsShrinkConfirmation && !shrinkConfirmed) ||
+                (pending?.profile.meaningfulEmpty && !intentConfirmed)
+              }
             >
               {recovering ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
