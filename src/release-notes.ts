@@ -15,6 +15,14 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.16.0',
+    date: '2026-09-26',
+    highlights: [
+      'New in Settings: Data recovery. If another app wiped or shrank your follows, mutes, bookmarks, profile, or relay lists, scan relay history for older versions and restore one. You review every change first, and nothing is published until you confirm.',
+      'Your own profile has a Restore link that opens it directly.'
+    ]
+  },
+  {
     version: '26.15.4',
     date: '2026-06-17',
     highlights: [
