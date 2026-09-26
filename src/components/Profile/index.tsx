@@ -29,6 +29,7 @@ import Followings from './Followings'
 import ProfileFeed from './ProfileFeed'
 import Relays from './Relays'
 import FavoriteButton from './FavoriteButton'
+import { showsDataRecoveryLink } from './data-recovery-link'
 
 export default function Profile({ id }: { id?: string }) {
   const { t } = useTranslation()
@@ -174,20 +175,26 @@ export default function Profile({ id }: { id?: string }) {
                 )}
               </div>
               {isSelf ? (
-                <SecondaryPageLink
-                  to={toDataRecoverySettings()}
-                  className="text-muted-foreground flex w-fit items-center gap-1 text-xs hover:underline"
-                >
-                  <span
-                    className="flex items-center gap-1"
-                    title={t(
-                      'If another client clobbered your follows, mutes, profile, or bookmarks, scan relay history to find and restore an older version'
-                    )}
+                showsDataRecoveryLink({
+                  profilePubkey: pubkey,
+                  signingPubkey: myPubkey,
+                  activePubkey: accountPubkey
+                }) && (
+                  <SecondaryPageLink
+                    to={toDataRecoverySettings()}
+                    className="text-muted-foreground flex w-fit items-center gap-1 text-xs hover:underline"
                   >
-                    <RotateCcw className="size-3.5" />
-                    {t('Restore')}
-                  </span>
-                </SecondaryPageLink>
+                    <span
+                      className="flex items-center gap-1"
+                      title={t(
+                        'If another client clobbered your follows, mutes, profile, or bookmarks, scan relay history to find and restore an older version'
+                      )}
+                    >
+                      <RotateCcw className="size-3.5" />
+                      {t('Restore')}
+                    </span>
+                  </SecondaryPageLink>
+                )
               ) : (
                 <FollowedBy pubkey={pubkey} />
               )}

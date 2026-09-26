@@ -821,9 +821,14 @@ const LazarusSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
                     {pending.profileChanges.map((change) => (
                       <div key={change.field} className="text-xs">
                         <div className="font-medium">{change.field}</div>
-                        <div className="break-words">{change.to ?? '—'}</div>
+                        <div dir="auto" className="break-words">
+                          {change.to ?? '—'}
+                        </div>
                         {change.from !== undefined && (
-                          <div className="text-muted-foreground break-words line-through">
+                          <div
+                            dir="auto"
+                            className="text-muted-foreground break-words line-through"
+                          >
                             {change.from}
                           </div>
                         )}
