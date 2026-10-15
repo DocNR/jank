@@ -1,11 +1,20 @@
-import { kinds, type Event, type Filter } from 'nostr-tools'
+import { kinds, type Event, type EventTemplate, type Filter, type VerifiedEvent } from 'nostr-tools'
+import { verifyEvent } from 'nostr-tools/pure'
+import { selectAuthSigner } from '@/services/auth-signer'
 import client from '@/services/client.service'
 import relayListService from '@/services/fetchers/relay-list.service'
 import { fitsNip46Request } from '@/lib/nip46'
 import { getDefaultRelayUrls } from '@/lib/relay'
 import { normalizeUrl } from '@/lib/url'
-import { countItemTags, getContentEncryption } from './private-items'
-import { getLazarusKindProfile, type LazarusItemCount, type LazarusKindProfile } from './registry'
+import type { IRelay, TSubCloser } from '@/types/relay-pool'
+import { getContentEncryption } from './private-items'
+import {
+  getLazarusItems,
+  getLazarusKindProfile,
+  getLazarusProfileFields,
+  type LazarusItemCount,
+  type LazarusKindProfile
+} from './registry'
 
 /**
  * Lazarus core: scan, rank, delta, recover-draft.
@@ -40,11 +49,34 @@ const CLOBBER_EPISODE_SECONDS = 24 * 60 * 60
 const SETTLED_MIN_EDITS = 5
 const SETTLED_MIN_SECONDS = 7 * 24 * 60 * 60
 
+/**
+ * Newer first, in the order NIP-01 has relays keep versions: the later
+ * created_at, and of two from the same second, the lower id. Every "newer"
+ * and "consecutive" below follows it.
+ */
+export function compareLazarusVersions(a: Event, b: Event): number {
+  return b.created_at - a.created_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+}
+
 /** An event together with the relay it was observed on. */
 export interface LazarusTaggedEvent {
   event: Event
   relayUrl: string
 }
+
+/**
+ * How a relay request ended: the relay sent EOSE, failed (couldn't connect,
+ * or closed the request or connection first), or timed out. Only an answered
+ * relay counts as having nothing.
+ */
+export type LazarusRelayOutcome = 'answered' | 'failed' | 'timed-out'
+
+/**
+ * The user's relay list: found (in the app's copy or on relays), missing
+ * (relays answered without one, so the defaults stand in as write relays),
+ * or unknown (no relay answered the lookup, so there are no write relays).
+ */
+export type LazarusRelayListStatus = 'found' | 'missing' | 'unknown'
 
 export interface LazarusCandidate {
   event: Event
@@ -65,7 +97,16 @@ export interface LazarusScanResult {
   /** True for meaningful-empty kinds: the user must choose with intent. */
   requiresIntentConfirmation: boolean
   queriedRelays: string[]
+  /** Relays that returned at least one version. */
   respondingRelays: string[]
+  /**
+   * True once at least one of the user's write relays answered. Until then
+   * the newest version found may not be current, and nothing is recommended.
+   */
+  currentConfirmed: boolean
+  /** How each queried relay's request ended. */
+  relayOutcomes?: Record<string, LazarusRelayOutcome>
+  relayList?: LazarusRelayListStatus
   /**
    * Relays that may hold versions older than the scan returned, keyed to the
    * created_at to page back from. Empty when the scan saw everything.
@@ -102,10 +143,13 @@ function countItems(
 ): LazarusItemCount {
   const itemCount = profile.itemCount(event)
   if (!privateTags || !profile.privateItemTypes) return itemCount
+  // An item listed both publicly and privately is one item
+  const publicItems = getLazarusItems(profile, event.tags)
+  const privateItems = [...getLazarusItems(profile, privateTags).keys()]
   return {
     count: itemCount.count,
     partial: false,
-    privateCount: countItemTags(privateTags, profile.privateItemTypes)
+    privateCount: privateItems.filter((key) => !publicItems.has(key)).length
   }
 }
 
@@ -124,53 +168,204 @@ export interface LazarusRelaySource {
     respondingRelays: string[]
     /** Relays whose answer filled the page, keyed to the cursor for the next one. */
     olderCursors?: Record<string, number>
+    /** How each relay's request ended. */
+    outcomes?: Record<string, LazarusRelayOutcome>
+    /**
+     * Whether one of the user's write relays answered. A source that doesn't
+     * report it is taken as confirmed.
+     */
+    currentConfirmed?: boolean
+    relayList?: LazarusRelayListStatus
   }>
 }
 
+/** What a relay sent in answer to a request, and how the request ended. */
+interface LazarusRelayAnswer {
+  events: Event[]
+  outcome: LazarusRelayOutcome
+}
+
+interface LazarusRelayRequestOptions {
+  timeoutMs?: number
+  /**
+   * The account to authenticate as when the relay requires it (NIP-42). Set
+   * only for relays in the user's own list: authenticating to any other
+   * proves to that relay that the account itself is asking.
+   */
+  authAs?: string
+}
+
 /**
- * One relay's answer to a filter. The subscription is closed as soon as the
- * relay finishes or times out, so a slow relay doesn't stay subscribed after
- * the scan moves on; a timeout counts as no answer.
+ * One relay's answer to a filter, asked of the relay itself. The client's
+ * shared subscription reports a relay that couldn't connect as finished, and
+ * a relay's own EOSE timeout reports silence as an answer, so neither can
+ * tell an unreachable relay from an empty one. Only EOSE counts as an
+ * answer; a refused connection, a CLOSED or a dropped connection is a
+ * failure. The request is closed as soon as the relay finishes, fails or
+ * times out, so a slow relay doesn't stay subscribed after the scan moves
+ * on. Events that arrived before a failure or timeout are kept: they're real
+ * versions, even though that relay's history is incomplete.
  */
 function fetchFromRelay(
   url: string,
   filter: Filter,
-  timeoutMs: number = SCAN_TIMEOUT_MS
-): Promise<Event[]> {
-  return new Promise((resolve, reject) => {
+  { timeoutMs = SCAN_TIMEOUT_MS, authAs }: LazarusRelayRequestOptions = {}
+): Promise<LazarusRelayAnswer> {
+  return new Promise((resolve) => {
     const events: Event[] = []
+    const seen = new Set<string>()
     let done = false
-    const finish = (error?: Error) => {
+    let sub: TSubCloser | undefined
+    const finish = (outcome: LazarusRelayOutcome) => {
       if (done) return
       done = true
       clearTimeout(timer)
-      sub.close()
-      if (error) reject(error)
-      else resolve(events)
+      sub?.close()
+      resolve({ events, outcome })
     }
-    const timer = setTimeout(() => finish(new Error('relay timeout')), timeoutMs)
-    const sub = client.subscribe([url], filter, {
-      onevent: (event) => {
-        events.push(event)
-      },
-      oneose: (eosed) => {
-        if (eosed) finish()
-      },
-      onAllClose: () => finish()
-    })
+    const timer = setTimeout(() => finish('timed-out'), timeoutMs)
+    const authenticate = (relay: IRelay, account: string) => {
+      const signer = selectAuthSigner((pk) => client.getSignerFor(pk), client.signer, account)
+      if (!signer) return finish('failed')
+      relay
+        .auth(async (authEvt: EventTemplate) => {
+          const signed = await signer.signEvent(authEvt)
+          if (!signed) throw new Error('sign event failed')
+          return signed as VerifiedEvent
+        })
+        .then(
+          () => request(relay, true),
+          () => finish('failed')
+        )
+    }
+    const request = (relay: IRelay, authenticated: boolean) => {
+      if (done) return
+      try {
+        sub = relay.subscribe([filter], {
+          onevent: (event) => {
+            if (done || seen.has(event.id)) return
+            seen.add(event.id)
+            events.push(event)
+          },
+          oneose: () => finish('answered'),
+          onclose: (reason) => {
+            if (done) return
+            if (authAs && !authenticated && reason.startsWith('auth-required')) {
+              return authenticate(relay, authAs)
+            }
+            finish('failed')
+          },
+          // This request's own timeout decides first
+          eoseTimeout: timeoutMs + 1000
+        })
+        if (done) sub.close()
+      } catch {
+        finish('failed')
+      }
+    }
+    client.pool.ensureRelay(url).then(
+      (relay) => request(relay, false),
+      () => finish('failed')
+    )
   })
+}
+
+/** Ask several relays at once. Only relays in `ownRelays` are asked to authenticate. */
+async function fetchFromRelays(
+  urls: string[],
+  filterFor: (url: string) => Filter,
+  { ownRelays = [], authAs, ...options }: LazarusRelayRequestOptions & { ownRelays?: string[] } = {}
+): Promise<LazarusRelayAnswer[]> {
+  const own = new Set(ownRelays)
+  const results = await Promise.allSettled(
+    urls.map((url) =>
+      fetchFromRelay(url, filterFor(url), {
+        ...options,
+        authAs: own.has(url) ? authAs : undefined
+      })
+    )
+  )
+  return results.map((result) =>
+    result.status === 'fulfilled' ? result.value : { events: [], outcome: 'failed' }
+  )
+}
+
+/**
+ * Whether an event a relay returned counts as a version of the scanned list.
+ * Relays are untrusted: one can return events outside the filter, or forged
+ * ones, and a restore would sign their content as the user's own.
+ */
+export function isLazarusVersion(event: Event, kind: number, pubkey: string): boolean {
+  return event.kind === kind && event.pubkey === pubkey && verifyEvent(event)
 }
 
 function uniqueRelayUrls(urls: string[]): string[] {
   return Array.from(new Set(urls.map((url) => normalizeUrl(url)).filter(Boolean)))
 }
 
-async function getWriteRelays(pubkey: string): Promise<string[]> {
-  try {
-    return uniqueRelayUrls((await relayListService.fetchRelayList(pubkey)).write)
-  } catch {
-    return uniqueRelayUrls(getDefaultRelayUrls())
+/** The relays a kind 10002 names. An unmarked relay is both read and write (NIP-65). */
+function parseRelayList(event: Event): { read: string[]; write: string[] } {
+  const read: string[] = []
+  const write: string[] = []
+  for (const [name, url, marker] of event.tags) {
+    if (name !== 'r' || !url) continue
+    if (marker !== 'write') read.push(url)
+    if (marker !== 'read') write.push(url)
   }
+  return { read: uniqueRelayUrls(read), write: uniqueRelayUrls(write) }
+}
+
+/**
+ * The user's relay list: the app's own copy when it has one, otherwise a
+ * lookup on the default and archival relays, which tells a missing list
+ * (relays answered without one) from one that couldn't be fetched (no relay
+ * answered). A missing list, or one naming no write relays, lets the
+ * defaults stand in as write relays. An unknown one leaves none, so current
+ * can't be confirmed. `own` is every relay the user's list names, the only
+ * relays a scan authenticates to.
+ */
+async function getLazarusUserRelays(pubkey: string): Promise<{
+  read: string[]
+  write: string[]
+  own: string[]
+  relayList: LazarusRelayListStatus
+}> {
+  let found: { read: string[]; write: string[] } | undefined
+  try {
+    const relayList = await relayListService.fetchRelayList(pubkey)
+    // Without a list, the service stands its defaults in with no original relays
+    if (relayList.originalRelays.length > 0) {
+      found = { read: uniqueRelayUrls(relayList.read), write: uniqueRelayUrls(relayList.write) }
+    }
+  } catch {
+    // Look the list up directly below
+  }
+  if (!found) {
+    // These relays are outside the user's list, so the lookup doesn't authenticate to them
+    const answers = await fetchFromRelays(
+      uniqueRelayUrls([...getDefaultRelayUrls(), ...LAZARUS_ARCHIVAL_RELAYS]),
+      () => ({ kinds: [kinds.RelayList], authors: [pubkey], limit: 1 })
+    )
+    const newest = answers
+      .flatMap((answer) => answer.events)
+      .filter((event) => isLazarusVersion(event, kinds.RelayList, pubkey))
+      .sort(compareLazarusVersions)[0]
+    if (newest) {
+      found = parseRelayList(newest)
+    } else if (!answers.some((answer) => answer.outcome === 'answered')) {
+      return { read: [], write: [], own: [], relayList: 'unknown' }
+    }
+  }
+  const own = found ? uniqueRelayUrls([...found.write, ...found.read]) : []
+  if (!found || found.write.length === 0) {
+    return {
+      read: found?.read ?? [],
+      write: uniqueRelayUrls(getDefaultRelayUrls()),
+      own,
+      relayList: 'missing'
+    }
+  }
+  return { ...found, own, relayList: 'found' }
 }
 
 /**
@@ -193,17 +388,28 @@ export const LAZARUS_ARCHIVAL_RELAYS = [
 /**
  * Relays to scan: every relay in the user's relay list (read and write, not
  * just the first few outbox relays), the app's default relays, and the
- * archival set.
+ * archival set. The plan also names the user's write relays, since current
+ * is confirmed only once one of them answers, and the relays of the user's
+ * own list, the only ones the scan authenticates to.
  */
-export async function getLazarusScanRelays(pubkey: string): Promise<string[]> {
-  let userRelays: string[] = []
-  try {
-    const relayList = await relayListService.fetchRelayList(pubkey)
-    userRelays = [...relayList.write, ...relayList.read]
-  } catch {
-    // Without the user's relay list, still scan the default and archival sets
+export async function getLazarusScanPlan(pubkey: string): Promise<{
+  relays: string[]
+  write: string[]
+  own: string[]
+  relayList: LazarusRelayListStatus
+}> {
+  const user = await getLazarusUserRelays(pubkey)
+  return {
+    relays: uniqueRelayUrls([
+      ...user.write,
+      ...user.read,
+      ...getDefaultRelayUrls(),
+      ...LAZARUS_ARCHIVAL_RELAYS
+    ]),
+    write: user.write,
+    own: user.own,
+    relayList: user.relayList
   }
-  return uniqueRelayUrls([...userRelays, ...getDefaultRelayUrls(), ...LAZARUS_ARCHIVAL_RELAYS])
 }
 
 /**
@@ -216,60 +422,78 @@ export async function getLazarusPublishRelays(
   pubkey: string,
   respondingRelays: string[]
 ): Promise<{ write: string[]; extra: string[] }> {
-  const write = await getWriteRelays(pubkey)
+  const { write } = await getLazarusUserRelays(pubkey)
   const extra = uniqueRelayUrls(respondingRelays).filter((url) => !write.includes(url))
   return { write, extra }
 }
 
 /**
- * The newest version on the user's write relays right now, to catch edits
- * made after a scan (from another column, device or client) before a restore
- * overwrites them.
+ * Publish a signed recovery to the user's write relays. It succeeds when at
+ * least one of them accepts it. The client's own publish asks more of a long
+ * relay list, and rejects once every relay has finished short of that, even
+ * when one accepted.
  */
-export async function fetchLatestLazarusVersion(
+export async function publishLazarusRecovery(write: string[], event: Event): Promise<void> {
+  if (write.length === 0) throw new Error('No write relays to publish to')
+  try {
+    await client.publishEvent(write, event)
+  } catch (error) {
+    const failed = error instanceof AggregateError ? error.errors.length : write.length
+    if (failed >= write.length) throw error
+  }
+}
+
+/**
+ * Every write relay's answer to the re-read before a restore, for
+ * checkLazarusCurrent. It catches edits made after a scan (from another
+ * column, device or client) before a restore overwrites them.
+ */
+export async function readLazarusCurrent(
   kind: number,
   pubkey: string
-): Promise<Event | undefined> {
-  const write = await getWriteRelays(pubkey)
-  const results = await Promise.allSettled(
-    write.map((url) => fetchFromRelay(url, { kinds: [kind], authors: [pubkey], limit: 1 }, 4000))
+): Promise<LazarusReadAnswer[]> {
+  const { write, own } = await getLazarusUserRelays(pubkey)
+  const answers = await fetchFromRelays(
+    write,
+    () => ({ kinds: [kind], authors: [pubkey], limit: 1 }),
+    { timeoutMs: 4000, authAs: pubkey, ownRelays: own }
   )
-  let newest: Event | undefined
-  for (const result of results) {
-    if (result.status !== 'fulfilled') continue
-    for (const event of result.value) {
-      if (event.pubkey === pubkey && (!newest || event.created_at > newest.created_at)) {
-        newest = event
-      }
-    }
-  }
-  return newest
+  return answers.map(({ events, outcome }) => ({
+    events: events.filter((event) => isLazarusVersion(event, kind, pubkey)),
+    answered: outcome === 'answered'
+  }))
 }
 
 /**
  * Per-relay scanning so each candidate keeps an accurate found-on list and
- * the result can report which relays actually answered. A relay that fails
+ * the result can report how each relay's request ended. A relay that fails
  * or times out never counts as "nothing found".
  */
 export const defaultLazarusRelaySource: LazarusRelaySource = {
   async fetchVersions(kind, pubkey, cursors) {
-    const urls = cursors ? Object.keys(cursors) : await getLazarusScanRelays(pubkey)
-
-    const results = await Promise.allSettled(
-      urls.map((url) => {
+    const plan = cursors ? undefined : await getLazarusScanPlan(pubkey)
+    const urls = plan ? plan.relays : Object.keys(cursors ?? {})
+    const answers = await fetchFromRelays(
+      urls,
+      (url) => {
         const filter = { kinds: [kind], authors: [pubkey], limit: SCAN_LIMIT }
-        const page = cursors ? { ...filter, until: cursors[url] } : filter
-        return fetchFromRelay(url, page)
-      })
+        return cursors ? { ...filter, until: cursors[url] } : filter
+      },
+      // Pages come from relays that filled one, mostly archival relays, and
+      // are asked for without authenticating
+      { authAs: pubkey, ownRelays: plan?.own }
     )
 
     const tagged: LazarusTaggedEvent[] = []
     const respondingRelays: string[] = []
     const olderCursors: Record<string, number> = {}
-    results.forEach((result, index) => {
-      if (result.status !== 'fulfilled') return
+    const outcomes: Record<string, LazarusRelayOutcome> = {}
+    answers.forEach(({ events, outcome }, index) => {
       const url = urls[index]
-      const relayEvents = result.value
+      outcomes[url] = outcome
+      // Only valid versions of the list count, as candidates, toward the
+      // relays that returned versions, and for paging
+      const relayEvents = events.filter((event) => isLazarusVersion(event, kind, pubkey))
       if (relayEvents.length > 0) respondingRelays.push(url)
       for (const event of relayEvents) {
         tagged.push({ event, relayUrl: url })
@@ -283,7 +507,17 @@ export const defaultLazarusRelaySource: LazarusRelaySource = {
       }
     })
 
-    return { tagged, queriedRelays: urls, respondingRelays, olderCursors }
+    return {
+      tagged,
+      queriedRelays: urls,
+      respondingRelays,
+      olderCursors,
+      outcomes,
+      ...(plan && {
+        currentConfirmed: plan.write.some((url) => outcomes[url] === 'answered'),
+        relayList: plan.relayList
+      })
+    }
   }
 }
 
@@ -296,12 +530,35 @@ export function scanLazarusKind(
   if (!profile) {
     return Promise.reject(new Error(`kind ${kind} is not in the Lazarus registry`))
   }
-  return source
-    .fetchVersions(kind, pubkey)
-    .then(({ tagged, queriedRelays, respondingRelays, olderCursors }) => ({
-      ...rankLazarusCandidates(profile, tagged, queriedRelays, respondingRelays),
-      olderCursors: olderCursors ?? {}
-    }))
+  return source.fetchVersions(kind, pubkey).then((result) => {
+    // A scan no relay answered failed: it isn't an empty result. Versions that
+    // arrived before the relays failed are still shown.
+    if (result.outcomes && result.tagged.length === 0 && !answeredAny(result.outcomes)) {
+      throw new Error('No relay answered the scan')
+    }
+    return {
+      ...rankLazarusCandidates(
+        profile,
+        result.tagged,
+        result.queriedRelays,
+        result.respondingRelays,
+        new Map(),
+        result.currentConfirmed ?? true
+      ),
+      olderCursors: result.olderCursors ?? {},
+      relayOutcomes: result.outcomes,
+      relayList: result.relayList
+    }
+  })
+}
+
+function answeredAny(outcomes: Record<string, LazarusRelayOutcome>): boolean {
+  return Object.values(outcomes).includes('answered')
+}
+
+/** True when the scan got versions but no relay answered: what arrived may be incomplete. */
+export function lazarusScanReachedNoRelay(scan: LazarusScanResult): boolean {
+  return !!scan.relayOutcomes && !answeredAny(scan.relayOutcomes)
 }
 
 /**
@@ -324,9 +581,12 @@ export async function loadOlderLazarusVersions(
       [...scanToTagged(scan), ...older.tagged],
       scan.queriedRelays,
       Array.from(new Set([...scan.respondingRelays, ...older.respondingRelays])),
-      privateTags
+      privateTags,
+      scan.currentConfirmed
     ),
-    olderCursors: older.olderCursors ?? {}
+    olderCursors: older.olderCursors ?? {},
+    relayOutcomes: scan.relayOutcomes,
+    relayList: scan.relayList
   }
 }
 
@@ -344,11 +604,15 @@ function looksClobbered(laterMax: number, earlierMin: number): boolean {
   return loss >= CLOBBER_MIN_LOSS_ITEMS && loss >= earlierMin * CLOBBER_MIN_LOSS_RATIO
 }
 
-/** Versions with a known size, oldest first. */
+/**
+ * Versions with a known size, oldest first. A version whose size is unknown
+ * takes no part in finding drops, episodes, the settled count or the fullest
+ * version, so consecutive means consecutive among these.
+ */
 function knownTimeline(candidates: LazarusCandidate[]): LazarusCandidate[] {
   return candidates
     .filter((c) => isLazarusSizeKnown(c.itemCount))
-    .sort((a, b) => a.event.created_at - b.event.created_at || (a.event.id < b.event.id ? 1 : -1))
+    .sort((a, b) => compareLazarusVersions(b.event, a.event))
 }
 
 interface ClobberEpisode {
@@ -420,7 +684,8 @@ export function rankLazarusCandidates(
   taggedEvents: LazarusTaggedEvent[],
   queriedRelays: string[] = [],
   respondingRelays: string[] = [],
-  privateTags: LazarusPrivateTags = new Map()
+  privateTags: LazarusPrivateTags = new Map(),
+  currentConfirmed = true
 ): LazarusScanResult {
   const byId = new Map<string, LazarusCandidate>()
   for (const { event, relayUrl } of taggedEvents) {
@@ -441,9 +706,7 @@ export function rankLazarusCandidates(
   }
 
   const candidates = Array.from(byId.values())
-  const newestFirst = [...candidates].sort(
-    (a, b) => b.event.created_at - a.event.created_at || (a.event.id < b.event.id ? -1 : 1)
-  )
+  const newestFirst = [...candidates].sort((a, b) => compareLazarusVersions(a.event, b.event))
   const current = newestFirst[0]
   if (current) current.isCurrent = true
 
@@ -459,10 +722,11 @@ export function rankLazarusCandidates(
       return range.min + range.max
     }
     ordered = [...candidates].sort(
-      (a, b) => size(b) - size(a) || b.event.created_at - a.event.created_at
+      (a, b) => size(b) - size(a) || compareLazarusVersions(a.event, b.event)
     )
-    // Nothing is recommended while the current size is unknown
-    if (current && isLazarusSizeKnown(current.itemCount)) {
+    // Nothing is recommended while the current size is unknown, or while no
+    // write relay answered: current may be a version the user already replaced
+    if (currentConfirmed && current && isLazarusSizeKnown(current.itemCount)) {
       recommended = findRestorePoint(candidates, current)
     }
   } else {
@@ -481,7 +745,8 @@ export function rankLazarusCandidates(
     recommended,
     requiresIntentConfirmation,
     queriedRelays,
-    respondingRelays
+    respondingRelays,
+    currentConfirmed
   }
 }
 
@@ -500,9 +765,12 @@ export function applyLazarusPrivateTags(
       scanToTagged(scan),
       scan.queriedRelays,
       scan.respondingRelays,
-      privateTags
+      privateTags,
+      scan.currentConfirmed
     ),
-    olderCursors: scan.olderCursors
+    olderCursors: scan.olderCursors,
+    relayOutcomes: scan.relayOutcomes,
+    relayList: scan.relayList
   }
 }
 
@@ -514,7 +782,7 @@ export function sortLazarusCandidates(
   order: LazarusSortOrder
 ): LazarusCandidate[] {
   const byDate = (a: LazarusCandidate, b: LazarusCandidate) =>
-    b.event.created_at - a.event.created_at || (a.event.id < b.event.id ? -1 : 1)
+    compareLazarusVersions(a.event, b.event)
   if (order === 'date') return [...candidates].sort(byDate)
   const size = (c: LazarusCandidate) => {
     const range = getLazarusItemRange(c.itemCount)
@@ -610,58 +878,87 @@ export interface LazarusDelta {
   /** True when recovery would shrink the list below current. */
   shrinks: boolean
   /**
-   * True when either version has encrypted private items that weren't
-   * decrypted, so the changes above cover public tags only.
+   * True when the chosen version has encrypted private items that weren't
+   * decrypted, so the changes above leave them out.
    */
+  privateUnknownChosen: boolean
+  /**
+   * True when current has encrypted private items that weren't decrypted.
+   * The restore replaces them uncounted, so it may remove items no count
+   * shows.
+   */
+  privateUnknownCurrent: boolean
+  /** True when either side's private items weren't decrypted. */
   privateUnknown: boolean
+  /**
+   * True when the restore needs the separate confirmation a shrinking one
+   * takes: it shrinks the list, or replaces private items nobody counted.
+   */
+  needsShrinkConfirmation: boolean
 }
 
 /**
- * What makes two tags the same item: their type and value. A relay hint or
- * petname a client rewrote doesn't change who is followed or muted. On relay
- * lists the read/write marker counts too, since it changes what the relay is
- * for.
+ * What a restore would change: the items it adds and removes. Items are the
+ * tags the registry names for the kind, each once, compared by type and
+ * value (see getLazarusItemKey); a profile's items are its content fields.
+ * Decrypted private items are compared together with the public tags, so an
+ * item that only moved between public and private isn't a change. Two
+ * versions with identical content hold the same private items, counted or
+ * not.
  */
-function tagIdentity(tag: string[], kind: number): string {
-  return JSON.stringify(tag.slice(0, kind === kinds.RelayList ? 3 : 2))
-}
-
 export function computeLazarusDelta(
   chosen: Event,
   current: Event | undefined,
   privateTags: LazarusPrivateTags = new Map()
 ): LazarusDelta {
-  // Decrypted private items are compared together with the public tags, so
-  // an item that only moved between public and private isn't a change
+  const profile = getLazarusKindProfile(chosen.kind) ?? { kind: chosen.kind }
+  const samePrivate = current?.content === chosen.content
+  const shared =
+    current && samePrivate ? (privateTags.get(chosen.id) ?? privateTags.get(current.id)) : undefined
   const itemsOf = (event: Event | undefined) => {
-    if (!event) return { tags: [] as string[][], unknown: false }
-    const decrypted = privateTags.get(event.id)
+    if (!event) return { items: new Map<string, string[]>(), unknown: false }
+    if (event.kind === kinds.Metadata) {
+      const fields = Object.entries(getLazarusProfileFields(event))
+      return {
+        items: new Map(
+          fields.map(([field, value]) => [
+            field,
+            [field, typeof value === 'string' ? value : JSON.stringify(value)]
+          ])
+        ),
+        unknown: false
+      }
+    }
+    const decrypted = privateTags.get(event.id) ?? shared
     return {
-      tags: [...event.tags, ...(decrypted ?? [])],
-      unknown: !decrypted && !!getContentEncryption(event.content)
+      items: getLazarusItems(profile, [...event.tags, ...(decrypted ?? [])]),
+      unknown: !decrypted && !samePrivate && !!getContentEncryption(event.content)
     }
   }
-  const identity = (tag: string[]) => tagIdentity(tag, chosen.kind)
-  const unique = (tags: string[][]) =>
-    Array.from(new Map(tags.map((t) => [identity(t), t])).values())
-  const chosenTags = unique(itemsOf(chosen).tags)
-  const currentTags = unique(itemsOf(current).tags)
-  const chosenIds = new Set(chosenTags.map(identity))
-  const currentIds = new Set(currentTags.map(identity))
-  const added = chosenTags.filter((tag) => !currentIds.has(identity(tag)))
-  const removed = currentTags.filter((tag) => !chosenIds.has(identity(tag)))
+  const chosenItems = itemsOf(chosen)
+  const currentItems = itemsOf(current)
+  const added = [...chosenItems.items]
+    .filter(([key]) => !currentItems.items.has(key))
+    .map(([, tag]) => tag)
+  const removed = [...currentItems.items]
+    .filter(([key]) => !chosenItems.items.has(key))
+    .map(([, tag]) => tag)
+  const shrinks = removed.length > added.length
   return {
     added,
     removed,
     addedCount: added.length,
     removedCount: removed.length,
     grows: added.length > 0 && added.length >= removed.length,
-    shrinks: removed.length > added.length,
-    privateUnknown: itemsOf(chosen).unknown || itemsOf(current).unknown
+    shrinks,
+    privateUnknownChosen: chosenItems.unknown,
+    privateUnknownCurrent: currentItems.unknown,
+    privateUnknown: chosenItems.unknown || currentItems.unknown,
+    needsShrinkConfirmation: shrinks || currentItems.unknown
   }
 }
 
-/** Profile fields a restore can change, in the order they're shown. */
+/** Well-known profile fields, shown first in this order. */
 const PROFILE_FIELDS = [
   'name',
   'display_name',
@@ -680,26 +977,86 @@ export interface LazarusProfileChange {
   to?: string
 }
 
-/** The profile (kind 0) fields a restore would change: its data lives in content, not tags. */
+/**
+ * The profile (kind 0) fields a restore would change. Profile content is
+ * extensible (pronouns, bot, client-specific fields) and a restore replaces
+ * all of it, tags included, so every field and tag counts: the well-known
+ * fields first, then any other field, then tags by name (NIP-30 custom emoji
+ * live there). Values that aren't strings show as JSON, and an empty string
+ * reads as absent.
+ */
 export function computeLazarusProfileChanges(
   chosen: Event,
   current: Event | undefined
 ): LazarusProfileChange[] {
-  const fieldsOf = (event: Event | undefined): Record<string, unknown> => {
-    try {
-      const parsed = JSON.parse(event?.content || '{}')
-      return parsed && typeof parsed === 'object' ? parsed : {}
-    } catch {
-      return {}
+  // Tag order carries no meaning here, so each tag name compares as a sorted set
+  const tagsOf = (event: Event | undefined): Record<string, string> => {
+    const byName: Record<string, string[]> = {}
+    for (const [name, ...values] of event?.tags ?? []) {
+      if (name) (byName[`${name} tags`] ??= []).push(values.join(' '))
     }
+    return Object.fromEntries(
+      Object.entries(byName).map(([field, values]) => [field, values.sort().join(', ')])
+    )
   }
-  const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : undefined)
-  const to = fieldsOf(chosen)
-  const from = fieldsOf(current)
-  return PROFILE_FIELDS.flatMap((field) => {
-    const change = { field, from: text(from[field]), to: text(to[field]) }
-    return change.from === change.to ? [] : [change]
-  })
+  const text = (value: unknown) => {
+    if (typeof value === 'string') return value.trim() ? value : undefined
+    return value === undefined || value === null ? undefined : JSON.stringify(value)
+  }
+  const to = getLazarusProfileFields(chosen)
+  const from = getLazarusProfileFields(current)
+  const toTags = tagsOf(chosen)
+  const fromTags = tagsOf(current)
+  const otherFields = Array.from(new Set([...Object.keys(from), ...Object.keys(to)]))
+    .filter((field) => !PROFILE_FIELDS.includes(field))
+    .sort()
+  const tagFields = Array.from(new Set([...Object.keys(fromTags), ...Object.keys(toTags)])).sort()
+  return [
+    ...[...PROFILE_FIELDS, ...otherFields].map((field) => ({
+      field,
+      from: text(from[field]),
+      to: text(to[field])
+    })),
+    ...tagFields.map((field) => ({ field, from: fromTags[field], to: toTags[field] }))
+  ].filter((change) => change.from !== change.to)
+}
+
+/**
+ * One write relay's answer to the re-read before a restore: the valid
+ * versions it sent, and whether it answered (sent EOSE). Versions from a
+ * relay that failed or timed out still show an edit.
+ */
+export interface LazarusReadAnswer {
+  events: Event[]
+  answered: boolean
+}
+
+export type LazarusCurrentCheck =
+  | { status: 'proceed'; current: Event | undefined }
+  | { status: 'changed'; current: Event }
+  | { status: 'unconfirmed' }
+
+/**
+ * Decide the re-read before a restore. The list changed only if the local
+ * copy or a write relay holds a version newer than the one the delta was
+ * computed against, including one from the same second with a lower id: the
+ * re-read asks fewer relays than the scan, so an older copy is no edit.
+ * Otherwise at least one write relay must have answered (an answer with no
+ * events counts), or current can't be confirmed and the restore must not go
+ * ahead. The local copy can't confirm it on its own.
+ */
+export function checkLazarusCurrent(
+  reviewed: Event | undefined,
+  local: Event | undefined,
+  answers: LazarusReadAnswer[]
+): LazarusCurrentCheck {
+  let newest = reviewed
+  for (const event of [local, ...answers.flatMap((answer) => answer.events)]) {
+    if (event && (!newest || compareLazarusVersions(event, newest) < 0)) newest = event
+  }
+  if (newest && newest.id !== reviewed?.id) return { status: 'changed', current: newest }
+  if (!answers.some((answer) => answer.answered)) return { status: 'unconfirmed' }
+  return { status: 'proceed', current: reviewed }
 }
 
 export interface LazarusRecoveryDraft {
