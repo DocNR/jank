@@ -22,7 +22,11 @@ export default function NotificationsColumnBody({ column }: { column: TColumn })
   const { viewContext } = useAccountScope()
   return (
     <NotificationProvider pubkey={viewContext} mode="column">
-      <NotificationList styleOverride={column.config?.listStyle} columnId={column.id} />
+      <NotificationList
+        styleOverride={column.config?.listStyle}
+        columnId={column.id}
+        trustScoreThreshold={column.config?.trustScoreThreshold}
+      />
     </NotificationProvider>
   )
 }

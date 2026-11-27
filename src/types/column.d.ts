@@ -78,12 +78,12 @@ export type TColumnConfig = {
    *  discovery. Filter runs client-side over the cached pubkey set; the
    *  Relatr request itself is unchanged. */
   relatrHideFollows?: boolean
-  /** Feed columns: trust-score filter threshold override (0-100). Hides
-   *  notes from authors whose Relatr rank falls in the bottom N%; WoT
-   *  members always pass; authors with no Relatr rank count as rank 0
-   *  (hidden whenever a threshold is on); 100 = WoT-only; 0/off or absent
-   *  = the global default from Settings. Set by the shield badge in the
-   *  column header, replacing the prior binary `wotOnly` bool. */
+  /** Feed columns (and notifications): trust-score filter threshold override
+   *  (0-100). Hides notes from authors whose Relatr rank falls in the
+   *  bottom N%; WoT members always pass; authors with no Relatr rank count
+   *  as rank 0 (hidden whenever a threshold is on); 100 = WoT-only; 0/off
+   *  or absent = the global default from Settings. Set by the shield badge
+   *  in the column header, replacing the prior binary `wotOnly` bool. */
   trustScoreThreshold?: number
   /** 'home': which <NormalFeed> tab this column opens on, persisted per-column
    *  so the choice survives reloads and rides the deck's NIP-78 sync. Matches a
