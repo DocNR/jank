@@ -15,6 +15,13 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.17.0',
+    date: '2026-11-27',
+    highlights: [
+      'Fixed a relay-connection leak in our Nostr library: relay WebSockets that failed or timed out during connect were never closed, so they accumulated across reconnects and could silently exhaust your browser\'s shared connection budget — making every nostr app in the browser (other tabs and extensions included) show "connect timeout" until jank was closed. The library upgrade fixes this at the source.'
+    ]
+  },
+  {
     version: '26.16.0',
     date: '2026-09-26',
     highlights: [
