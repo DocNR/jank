@@ -1,9 +1,12 @@
 import Tabs from '@/components/Tabs'
+import TrustScoreFilter from '@/components/TrustScoreFilter'
+import { TRUST_SCORE_FILTER_ID } from '@/constants'
 import { useFilteredAllReplies } from '@/hooks'
 import { useFilteredLikeCount } from '@/hooks/useFilteredLikeCount'
 import { useFilteredRepostCount } from '@/hooks/useFilteredRepostCount'
 import { useStuff } from '@/hooks/useStuff'
 import { useStuffStatsById } from '@/hooks/useStuffStatsById'
+import { useUserTrust } from '@/providers/UserTrustProvider'
 import { Event } from 'nostr-tools'
 import { useCallback, useMemo, useState } from 'react'
 import QuoteList from '../QuoteList'
@@ -23,6 +26,7 @@ export default function NoteInteractions({ event }: { event: Event }) {
   const reactionCount = useFilteredLikeCount(stuffKey)
   const zapCount = noteStats?.zaps?.length ?? 0
   const [quoteCount, setQuoteCount] = useState(0)
+  const { getMinTrustScore, updateMinTrustScore } = useUserTrust()
 
   const handleQuoteCountChange = useCallback((count: number) => {
     setQuoteCount(count)
@@ -59,7 +63,17 @@ export default function NoteInteractions({ event }: { event: Event }) {
 
   return (
     <>
-      <Tabs tabs={tabs} value={type} onTabChange={(tab) => setType(tab as TTabValue)} />
+      <Tabs
+        tabs={tabs}
+        value={type}
+        onTabChange={(tab) => setType(tab as TTabValue)}
+        options={
+          <TrustScoreFilter
+            value={getMinTrustScore(TRUST_SCORE_FILTER_ID.THREAD_REPLIES)}
+            onChange={(score) => updateMinTrustScore(TRUST_SCORE_FILTER_ID.THREAD_REPLIES, score)}
+          />
+        }
+      />
       {list}
       <div className={type === 'quotes' ? undefined : 'hidden'}>
         <QuoteList stuff={event} onCountChange={handleQuoteCountChange} />

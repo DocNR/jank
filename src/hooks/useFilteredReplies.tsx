@@ -1,8 +1,10 @@
 import { getEventKey, getThreadRootId, isInMutedThread, isMentioningMutedUsers } from '@/lib/event'
+import { TRUST_SCORE_FILTER_ID } from '@/constants'
 import { useContentPolicy } from '@/providers/ContentPolicyProvider'
 import { useMuteList } from '@/providers/UserListsProvider'
 import { useMutedThreadReveal } from '@/providers/MutedThreadRevealProvider'
 import { useNostr } from '@/providers/NostrProvider'
+import { useUserTrust } from '@/providers/UserTrustProvider'
 import { NostrEvent } from 'nostr-tools'
 import { useEffect, useState } from 'react'
 import { useAllDescendantThreads } from './useThread'
@@ -12,37 +14,61 @@ export function useFilteredReplies(stuffKey: string) {
   const { mutePubkeySet, muteEventIdSet } = useMuteList()
   const { hideContentMentioningMutedUsers } = useContentPolicy()
   const { revealed: revealedMutedThreads } = useMutedThreadReveal()
+  const { getMinTrustScore, meetsMinTrustScore } = useUserTrust()
+  // The thread view's shield badge sets this slot (TRUST_SCORE_FILTER_ID.
+  // THREAD_REPLIES). 0 = off.
+  const trustThreshold = getMinTrustScore(TRUST_SCORE_FILTER_ID.THREAD_REPLIES)
   const allThreads = useAllDescendantThreads(stuffKey)
   const [replies, setReplies] = useState<NostrEvent[]>([])
   const [hasReplied, setHasReplied] = useState(false)
 
   useEffect(() => {
-    const replyKeySet = new Set<string>()
-    const thread = allThreads.get(stuffKey) || []
-    const filtered: NostrEvent[] = []
+    let cancelled = false
 
-    for (const evt of thread) {
-      const key = getEventKey(evt)
-      if (replyKeySet.has(key)) continue
-      replyKeySet.add(key)
+    const run = async () => {
+      const replyKeySet = new Set<string>()
+      const thread = allThreads.get(stuffKey) || []
+      const filtered: NostrEvent[] = []
 
-      if (mutePubkeySet.has(evt.pubkey)) continue
-      if (isInMutedThread(evt, muteEventIdSet) && !revealedMutedThreads.has(getThreadRootId(evt)))
-        continue
-      if (hideContentMentioningMutedUsers && isMentioningMutedUsers(evt, mutePubkeySet)) continue
+      for (const evt of thread) {
+        const key = getEventKey(evt)
+        if (replyKeySet.has(key)) continue
+        replyKeySet.add(key)
 
-      filtered.push(evt)
+        if (mutePubkeySet.has(evt.pubkey)) continue
+        if (isInMutedThread(evt, muteEventIdSet) && !revealedMutedThreads.has(getThreadRootId(evt)))
+          continue
+        if (hideContentMentioningMutedUsers && isMentioningMutedUsers(evt, mutePubkeySet)) continue
+
+        filtered.push(evt)
+      }
+
+      let out = filtered
+      if (trustThreshold > 0) {
+        const keep = await Promise.all(
+          filtered.map((evt) => meetsMinTrustScore(evt.pubkey, trustThreshold))
+        )
+        out = filtered.filter((_, i) => keep[i])
+      }
+
+      if (cancelled) return
+      out.sort((a, b) => b.created_at - a.created_at)
+      setReplies(out)
     }
 
-    filtered.sort((a, b) => b.created_at - a.created_at)
-    setReplies(filtered)
+    run()
+    return () => {
+      cancelled = true
+    }
   }, [
     stuffKey,
     allThreads,
     mutePubkeySet,
     muteEventIdSet,
     revealedMutedThreads,
-    hideContentMentioningMutedUsers
+    hideContentMentioningMutedUsers,
+    trustThreshold,
+    meetsMinTrustScore
   ])
 
   useEffect(() => {
@@ -65,38 +91,66 @@ export function useFilteredAllReplies(stuffKey: string) {
   const { mutePubkeySet, muteEventIdSet } = useMuteList()
   const { hideContentMentioningMutedUsers } = useContentPolicy()
   const { revealed: revealedMutedThreads } = useMutedThreadReveal()
+  const { getMinTrustScore, meetsMinTrustScore } = useUserTrust()
+  const trustThreshold = getMinTrustScore(TRUST_SCORE_FILTER_ID.THREAD_REPLIES)
   const [replies, setReplies] = useState<NostrEvent[]>([])
   const [hasReplied, setHasReplied] = useState(false)
 
   useEffect(() => {
-    const replyKeySet = new Set<string>()
-    const replyEvents: NostrEvent[] = []
+    let cancelled = false
 
-    let parentKeys = [stuffKey]
-    while (parentKeys.length > 0) {
-      const events = parentKeys.flatMap((key) => allThreads.get(key) ?? [])
-      for (const evt of events) {
-        const key = getEventKey(evt)
-        if (replyKeySet.has(key)) continue
-        replyKeySet.add(key)
+    const run = async () => {
+      const replyKeySet = new Set<string>()
+      const replyEvents: NostrEvent[] = []
 
-        if (mutePubkeySet.has(evt.pubkey)) continue
-        if (isInMutedThread(evt, muteEventIdSet) && !revealedMutedThreads.has(getThreadRootId(evt)))
-          continue
-        if (hideContentMentioningMutedUsers && isMentioningMutedUsers(evt, mutePubkeySet)) continue
+      let parentKeys = [stuffKey]
+      while (parentKeys.length > 0) {
+        const events = parentKeys.flatMap((key) => allThreads.get(key) ?? [])
+        for (const evt of events) {
+          const key = getEventKey(evt)
+          if (replyKeySet.has(key)) continue
+          replyKeySet.add(key)
 
-        replyEvents.push(evt)
+          if (mutePubkeySet.has(evt.pubkey)) continue
+          if (
+            isInMutedThread(evt, muteEventIdSet) &&
+            !revealedMutedThreads.has(getThreadRootId(evt))
+          )
+            continue
+          if (hideContentMentioningMutedUsers && isMentioningMutedUsers(evt, mutePubkeySet))
+            continue
+
+          replyEvents.push(evt)
+        }
+        parentKeys = events.map((evt) => getEventKey(evt))
       }
-      parentKeys = events.map((evt) => getEventKey(evt))
+
+      let out = replyEvents
+      if (trustThreshold > 0) {
+        const keep = await Promise.all(
+          replyEvents.map((evt) => meetsMinTrustScore(evt.pubkey, trustThreshold))
+        )
+        out = replyEvents.filter((_, i) => keep[i])
+      }
+
+      if (cancelled) return
+      out.sort((a, b) => a.created_at - b.created_at)
+      setReplies(out)
     }
-    setReplies(replyEvents.sort((a, b) => a.created_at - b.created_at))
+
+    run()
+    return () => {
+      cancelled = true
+    }
   }, [
     stuffKey,
     allThreads,
     mutePubkeySet,
     muteEventIdSet,
     revealedMutedThreads,
-    hideContentMentioningMutedUsers
+    hideContentMentioningMutedUsers,
+    trustThreshold,
+    meetsMinTrustScore
   ])
 
   useEffect(() => {

@@ -5,13 +5,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { AlignJustify, Ellipsis, LayoutList, PencilLine, Shield, ShieldOff } from 'lucide-react'
+import { AlignJustify, Ellipsis, LayoutList, PencilLine } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 /**
  * The column header's "⋯" overflow menu — holds the secondary per-column
- * actions (compose, list-style toggle, WoT-only toggle) so the header bar
- * stays to label + signing indicator + 📌 + ⋯ + ✕.
+ * actions (compose, list-style toggle) so the header bar stays to label +
+ * signing indicator + 📌 + shield + ⋯ + ✕.
  *
  * The header only renders this when at least one item would show (see
  * `showMenu` in ColumnHeader), so the menu is never empty.
@@ -20,9 +20,7 @@ export default function ColumnHeaderMenu({
   showCompose,
   onCompose,
   effectiveListStyle,
-  onToggleListStyle,
-  wotOnly,
-  onToggleWotOnly
+  onToggleListStyle
 }: {
   /** Whether the "New post" item is shown — false on view-only columns. */
   showCompose: boolean
@@ -32,17 +30,11 @@ export default function ColumnHeaderMenu({
    *  either is undefined the toggle item is not rendered. */
   effectiveListStyle?: 'compact' | 'detailed'
   onToggleListStyle?: () => void
-  /** WoT-toggle columns only (hashtag/search/relay): current value + handler.
-   *  When `onToggleWotOnly` is undefined the toggle item is not rendered. */
-  wotOnly?: boolean
-  onToggleWotOnly?: () => void
 }) {
   const { t } = useTranslation()
   const showListStyleToggle = !!effectiveListStyle && !!onToggleListStyle
   const nextListStyleLabel =
     effectiveListStyle === 'compact' ? t('Detailed view') : t('Compact view')
-  const showWotToggle = !!onToggleWotOnly
-  const wotLabel = wotOnly ? t('Show everyone') : t('Show only WoT')
 
   return (
     <DropdownMenu>
@@ -68,12 +60,6 @@ export default function ColumnHeaderMenu({
           <DropdownMenuItem onClick={onToggleListStyle}>
             {effectiveListStyle === 'compact' ? <LayoutList /> : <AlignJustify />}
             {nextListStyleLabel}
-          </DropdownMenuItem>
-        )}
-        {showWotToggle && (
-          <DropdownMenuItem onClick={onToggleWotOnly}>
-            {wotOnly ? <ShieldOff /> : <Shield />}
-            {wotLabel}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

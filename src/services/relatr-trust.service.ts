@@ -4,8 +4,11 @@
 //
 // Reads Relatr's openly-published kind-30382 Trusted Assertion events via
 // batched nostr subscriptions. Same 0-100 scale as fayan's percentile (no
-// rescaling). Same fail-open semantics as fayan (null return → consumer
-// allows the user). 3-day TTL on both positive and negative cache entries.
+// rescaling). getRank keeps the original null contract; filter consumers use
+// getFilterRank, which distinguishes "definitively unranked" (null → counts
+// as rank 0, matching upstream Jumble's unknown-percentile handling) from
+// "lookup failed" (undefined → fail open). 3-day TTL on both positive and
+// negative cache entries.
 //
 // Spec: docs/superpowers/specs/2026-05-25-path-b-fayan-to-relatr-trust-swap-design.md
 
@@ -50,6 +53,17 @@ export interface IRelatrTrustService {
    * has no TA for this pubkey AFTER a fetch (fail-open at consumer layer).
    */
   getRank(pubkey: string): Promise<number | null>
+
+  /**
+   * Filter-consumer lookup with three-state semantics:
+   * - number    → Relatr rank 0-100
+   * - null      → definitively unranked (EOSE received, no Trusted
+   *               Assertion) — filter consumers treat this as rank 0, so
+   *               throwaway spam accounts fail every threshold
+   * - undefined → rank unknown (Relatr relays unreachable, batch timed out)
+   *               — filter consumers fail open (show)
+   */
+  getFilterRank(pubkey: string): Promise<number | null | undefined>
 
   /**
    * Prime the cache with a known rank — e.g. from the Relatr People column's
@@ -128,6 +142,23 @@ class RelatrTrustService implements IRelatrTrustService {
     }
     this.loader.clear(pubkey)
     return this.loader.load(pubkey)
+  }
+
+  async getFilterRank(pubkey: string): Promise<number | null | undefined> {
+    await this.ensureHydrated()
+    const peeked = this.peekRank(pubkey)
+    if (peeked !== undefined) return peeked
+    if (this.relayLookupFailed) return undefined
+    try {
+      const rank = await this.loader.load(pubkey)
+      // A relay-list failure inside the batch resolves null (getRank's null
+      // contract) but latches relayLookupFailed — that's "unknown", not
+      // "unranked".
+      if (this.relayLookupFailed) return undefined
+      return rank
+    } catch {
+      return undefined
+    }
   }
 
   primeRank(pubkey: string, rank: number, computedAt: number): void {
@@ -269,6 +300,7 @@ class RelatrTrustService implements IRelatrTrustService {
 
     const results = new Map<string, number>()
 
+    let eosed = false
     let eoseResolve: (() => void) | undefined
     const completion = new Promise<void>((resolve) => {
       eoseResolve = resolve
@@ -291,6 +323,7 @@ class RelatrTrustService implements IRelatrTrustService {
           results.set(dTag, parsed)
         },
         oneose: () => {
+          eosed = true
           eoseResolve?.()
         }
       }
@@ -302,6 +335,14 @@ class RelatrTrustService implements IRelatrTrustService {
       new Promise<void>((resolve) => setTimeout(resolve, SUBSCRIBE_TIMEOUT_MS))
     ])
     sub.close()
+
+    if (!eosed) {
+      // Timed out without EOSE: the misses are "unknown", not "unranked" —
+      // negative-caching them would lock that in for the 3-day TTL. Reject
+      // so getFilterRank consumers fail open; cleared keys retry next call.
+      pubkeys.forEach((key) => this.loader.clear(key))
+      throw new Error('[relatrTrust] batch timed out without EOSE')
+    }
 
     // Persist + cache every pubkey in the batch — hits get their rank,
     // misses get the negative-cache entry.

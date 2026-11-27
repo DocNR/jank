@@ -117,6 +117,13 @@ export function migrateColumns(raw: unknown): TColumn[] {
         }
         delete rawConfig.notificationListStyle
       }
+      // Legacy binary WoT toggle → trust-score threshold. `wotOnly: true`
+      // meant "WoT members only", which is the 100 preset of the slider
+      // filter. `false` just drops off. Idempotent.
+      if (rawConfig.wotOnly === true && rawConfig.trustScoreThreshold === undefined) {
+        rawConfig.trustScoreThreshold = 100
+      }
+      delete rawConfig.wotOnly
       config = rawConfig as TColumnConfig
     }
 
@@ -248,6 +255,8 @@ class LocalStorageService {
   private searchRelayUrls: string[] = SEARCHABLE_RELAY_URLS
   private searchHistory: string[] = []
   private mutedWords: string[] = []
+  private minTrustScore: number = 0
+  private minTrustScoreMap: Record<string, number> = {}
   private hideIndirectNotifications: boolean = false
   // Per-pubkey maps for fields that historically lived inline on TAccount.
   // Always the source of truth at runtime regardless of mode.
@@ -560,6 +569,29 @@ class LocalStorageService {
         const words = JSON.parse(mutedWordsStr)
         if (Array.isArray(words) && words.every((word) => typeof word === 'string')) {
           this.mutedWords = words
+        }
+      } catch {
+        // Invalid JSON, use default
+      }
+    }
+
+    const minTrustScoreStr = window.localStorage.getItem(StorageKey.TRUST_SCORE_THRESHOLD)
+    if (minTrustScoreStr) {
+      const score = parseInt(minTrustScoreStr, 10)
+      if (score >= 0 && score <= 100) {
+        this.minTrustScore = score
+      }
+    }
+    const minTrustScoreMapStr = window.localStorage.getItem(StorageKey.TRUST_SCORE_THRESHOLD_MAP)
+    if (minTrustScoreMapStr) {
+      try {
+        const map = JSON.parse(minTrustScoreMapStr)
+        if (
+          typeof map === 'object' &&
+          map !== null &&
+          Object.values(map).every((score) => typeof score === 'number')
+        ) {
+          this.minTrustScoreMap = map
         }
       } catch {
         // Invalid JSON, use default
@@ -1025,6 +1057,24 @@ class LocalStorageService {
   setHideContentMentioningMutedUsers(hide: boolean) {
     this.hideContentMentioningMutedUsers = hide
     window.localStorage.setItem(StorageKey.HIDE_CONTENT_MENTIONING_MUTED_USERS, hide.toString())
+  }
+
+  getMinTrustScore() {
+    return this.minTrustScore
+  }
+
+  setMinTrustScore(score: number) {
+    this.minTrustScore = score
+    window.localStorage.setItem(StorageKey.TRUST_SCORE_THRESHOLD, score.toString())
+  }
+
+  getMinTrustScoreMap() {
+    return this.minTrustScoreMap
+  }
+
+  setMinTrustScoreMap(map: Record<string, number>) {
+    this.minTrustScoreMap = map
+    window.localStorage.setItem(StorageKey.TRUST_SCORE_THRESHOLD_MAP, JSON.stringify(map))
   }
 
   getNotificationListStyle() {

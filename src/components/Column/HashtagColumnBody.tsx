@@ -41,12 +41,18 @@ export default function HashtagColumnBody({ column }: { column: TColumn }) {
 
   return (
     <ColumnListStyleProvider styleOverride={column.config?.listStyle}>
-      <HashtagFeed hashtags={hashtags} wotOnly={!!column.config?.wotOnly} />
+      <HashtagFeed hashtags={hashtags} trustScoreThreshold={column.config?.trustScoreThreshold} />
     </ColumnListStyleProvider>
   )
 }
 
-function HashtagFeed({ hashtags, wotOnly }: { hashtags: string[]; wotOnly: boolean }) {
+function HashtagFeed({
+  hashtags,
+  trustScoreThreshold
+}: {
+  hashtags: string[]
+  trustScoreThreshold?: number
+}) {
   const listStyle = useEffectiveListStyle()
   const subRequests = useMemo<TFeedSubRequest[]>(
     () => [{ urls: getDefaultRelayUrls(), filter: { kinds: HASHTAG_KINDS, '#t': hashtags } }],
@@ -57,7 +63,7 @@ function HashtagFeed({ hashtags, wotOnly }: { hashtags: string[]; wotOnly: boole
       subRequests={subRequests}
       showKinds={HASHTAG_KINDS}
       listStyle={listStyle}
-      wotOnly={wotOnly}
+      trustScoreThreshold={trustScoreThreshold}
     />
   )
 }

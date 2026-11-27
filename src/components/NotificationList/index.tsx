@@ -8,6 +8,7 @@ import { AtSign, CheckCheck, Heart, MessageCircle, Repeat2, Zap } from 'lucide-r
 import { useDeepBrowsing } from '@/providers/DeepBrowsingProvider'
 import { useNotification } from '@/providers/NotificationProvider'
 import { useUserPreferences } from '@/providers/UserPreferencesProvider'
+import { useUserTrust } from '@/providers/UserTrustProvider'
 import { TNotificationType } from '@/types'
 import { notificationBucket } from '@/lib/notification-bucket'
 import dayjs from 'dayjs'
@@ -28,7 +29,8 @@ const LOAD_MORE_LIMIT = 100
 
 export default function NotificationList({
   styleOverride,
-  columnId
+  columnId,
+  trustScoreThreshold
 }: {
   /**
    * Per-column override of the global notificationListStyle pref. When
@@ -41,14 +43,17 @@ export default function NotificationList({
   /** The owning Notifications column's id. When set, this list publishes its
    *  unread count to notificationUnreadCountAtom[columnId] for the header badge. */
   columnId?: string
+  /** Trust-score filter threshold override for this column (0-100).
+   *  Undefined falls back to the global default from Settings
+   *  (useUserTrust). Hides notifications whose author's Relatr rank is in
+   *  the bottom N% — the owner and WoT members always pass, unranked
+   *  authors count as rank 0, lookup failures fail open. Set by
+   *  NotificationsColumnBody from `column.config?.trustScoreThreshold`
+   *  (the shield badge in the column header). */
+  trustScoreThreshold?: number
 } = {}) {
   const { t } = useTranslation()
-  const {
-    pubkey,
-    service,
-    getNotificationsSeenAt,
-    markAllNotificationsAsRead
-  } = useNotification()
+  const { pubkey, service, getNotificationsSeenAt, markAllNotificationsAsRead } = useNotification()
   const { readSet } = useReadNotifications(pubkey)
   const { density } = useUserPreferences()
   const isCompact = density === 'compact'
@@ -58,6 +63,10 @@ export default function NotificationList({
   // pubkey would otherwise be dropped by notificationFilter's recipient check
   // when active != pubkey.
   const filterFn = useNotificationFilter(pubkey)
+  const { minTrustScore, meetsMinTrustScore } = useUserTrust()
+  // Effective threshold: the column's override when set, else the global
+  // default from Settings. 0 = off.
+  const trustThreshold = trustScoreThreshold ?? minTrustScore
   const [notificationType, setNotificationType] = useState<TNotificationType>('all')
   const [filteredEvents, setFilteredEvents] = useState<NostrEvent[]>([])
   const [initialLoading, setInitialLoading] = useState(service.getInitialLoading())
@@ -104,6 +113,10 @@ export default function NotificationList({
         if (ok === undefined) {
           ok = await filterFn(evt)
           if (cancelled) return
+          if (ok && trustThreshold > 0) {
+            ok = await meetsMinTrustScore(evt.pubkey, trustThreshold)
+            if (cancelled) return
+          }
           cache.set(evt.id, ok)
         }
         if (ok) passed.push(evt)
@@ -137,7 +150,7 @@ export default function NotificationList({
       if (rafId) cancelAnimationFrame(rafId)
       unsub()
     }
-  }, [pubkey, filterFn, service, isColumnVisible])
+  }, [pubkey, filterFn, service, isColumnVisible, trustThreshold, meetsMinTrustScore])
 
   const handleLoadMore = useCallback(async () => {
     return service.loadMore(LOAD_MORE_LIMIT)
@@ -227,77 +240,77 @@ export default function NotificationList({
 
   return (
     <ColumnListStyleProvider styleOverride={styleOverride}>
-    <div>
-      <div
-        className={cn(
-          'bg-background sticky top-12 z-30 flex items-center gap-2 border-b border-border/30 px-3 backdrop-blur-md',
-          isCompact ? 'py-1' : 'py-2'
-        )}
-      >
-        <div className="flex flex-1 items-center justify-between gap-1">
-          <NotificationChip
-            type="replies"
-            icon={MessageCircle}
-            active={notificationType === 'replies'}
-            onClick={handleChipClick}
-            label={t('Replies')}
-          />
-          <NotificationChip
-            type="reactions"
-            icon={Heart}
-            active={notificationType === 'reactions'}
-            onClick={handleChipClick}
-            label={t('Reactions')}
-          />
-          <NotificationChip
-            type="zaps"
-            icon={Zap}
-            active={notificationType === 'zaps'}
-            onClick={handleChipClick}
-            label={t('Zaps')}
-          />
-          <NotificationChip
-            type="reposts"
-            icon={Repeat2}
-            active={notificationType === 'reposts'}
-            onClick={handleChipClick}
-            label={t('Reposts')}
-          />
-          <NotificationChip
-            type="mentions"
-            icon={AtSign}
-            active={notificationType === 'mentions'}
-            onClick={handleChipClick}
-            label={t('Mentions')}
-          />
-        </div>
-        <div className="bg-border/40 h-4 w-px shrink-0" />
-        <button
-          type="button"
-          title={t('Mark all as read')}
-          aria-label={t('Mark all as read')}
-          onClick={handleMarkAllAsRead}
-          disabled={unreadIds.length === 0}
+      <div>
+        <div
           className={cn(
-            'flex shrink-0 items-center rounded-md p-1.5 transition-colors',
-            unreadIds.length === 0
-              ? 'text-muted-foreground/40 cursor-default'
-              : 'text-muted-foreground hover:bg-accent/30 hover:text-foreground'
+            'bg-background border-border/30 sticky top-12 z-30 flex items-center gap-2 border-b px-3 backdrop-blur-md',
+            isCompact ? 'py-1' : 'py-2'
           )}
         >
-          <CheckCheck className="size-3.5" />
-        </button>
+          <div className="flex flex-1 items-center justify-between gap-1">
+            <NotificationChip
+              type="replies"
+              icon={MessageCircle}
+              active={notificationType === 'replies'}
+              onClick={handleChipClick}
+              label={t('Replies')}
+            />
+            <NotificationChip
+              type="reactions"
+              icon={Heart}
+              active={notificationType === 'reactions'}
+              onClick={handleChipClick}
+              label={t('Reactions')}
+            />
+            <NotificationChip
+              type="zaps"
+              icon={Zap}
+              active={notificationType === 'zaps'}
+              onClick={handleChipClick}
+              label={t('Zaps')}
+            />
+            <NotificationChip
+              type="reposts"
+              icon={Repeat2}
+              active={notificationType === 'reposts'}
+              onClick={handleChipClick}
+              label={t('Reposts')}
+            />
+            <NotificationChip
+              type="mentions"
+              icon={AtSign}
+              active={notificationType === 'mentions'}
+              onClick={handleChipClick}
+              label={t('Mentions')}
+            />
+          </div>
+          <div className="bg-border/40 h-4 w-px shrink-0" />
+          <button
+            type="button"
+            title={t('Mark all as read')}
+            aria-label={t('Mark all as read')}
+            onClick={handleMarkAllAsRead}
+            disabled={unreadIds.length === 0}
+            className={cn(
+              'flex shrink-0 items-center rounded-md p-1.5 transition-colors',
+              unreadIds.length === 0
+                ? 'text-muted-foreground/40 cursor-default'
+                : 'text-muted-foreground hover:bg-accent/30 hover:text-foreground'
+            )}
+          >
+            <CheckCheck className="size-3.5" />
+          </button>
+        </div>
+        <div ref={topRef} className="scroll-mt-21.5" />
+        <PullToRefresh
+          onRefresh={async () => {
+            refresh()
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+          }}
+        >
+          {list}
+        </PullToRefresh>
       </div>
-      <div ref={topRef} className="scroll-mt-21.5" />
-      <PullToRefresh
-        onRefresh={async () => {
-          refresh()
-          await new Promise((resolve) => setTimeout(resolve, 1000))
-        }}
-      >
-        {list}
-      </PullToRefresh>
-    </div>
     </ColumnListStyleProvider>
   )
 }
@@ -379,7 +392,7 @@ function NotificationChip({
         isCompact ? 'py-0.5' : 'py-1',
         active
           ? 'bg-primary/15 border-primary/35 text-primary'
-          : 'border-transparent text-muted-foreground hover:bg-accent/30 hover:text-foreground'
+          : 'text-muted-foreground hover:bg-accent/30 hover:text-foreground border-transparent'
       )}
     >
       <Icon className="size-3.5" />

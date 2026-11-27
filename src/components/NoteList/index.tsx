@@ -17,7 +17,9 @@ import { useScrollContainer } from '@/providers/ScrollContainerProvider'
 import { useUserTrust } from '@/providers/UserTrustProvider'
 import timelineCache from '@/services/caches/timeline-cache.service'
 import client from '@/services/client.service'
+import relatrTrust from '@/services/relatr-trust.service'
 import threadService from '@/services/thread.service'
+import { SPAM_RANK_THRESHOLD } from '@/constants'
 import { TFeedSubRequest, TNotificationStyle } from '@/types'
 import dayjs from 'dayjs'
 import { Event } from 'nostr-tools'
@@ -74,10 +76,15 @@ const NoteList = forwardRef<
     filterMutedNotes?: boolean
     hideReplies?: boolean
     hideSpam?: boolean
-    /** When true, hide notes from authors outside the user's 2-hop WoT (your
-     *  follows + their follows). Driven by per-column `config.wotOnly` for
-     *  hashtag/search/relay columns; default false. */
-    wotOnly?: boolean
+    /** Trust-score filter threshold override for this feed (0-100).
+     *  Undefined falls back to the global default from Settings
+     *  (useUserTrust). Hides notes whose author's Relatr rank is in the
+     *  bottom N% — the owner and WoT members always pass, authors with no
+     *  Relatr rank count as rank 0 (hidden whenever a threshold is on,
+     *  matching upstream Jumble), and lookup failures fail open. Driven by
+     *  the shield badge in the column header
+     *  (`config.trustScoreThreshold`). */
+    trustScoreThreshold?: number
     areAlgoRelays?: boolean
     showRelayCloseReason?: boolean
     pinnedEventIds?: string[]
@@ -113,7 +120,7 @@ const NoteList = forwardRef<
       filterMutedNotes = true,
       hideReplies = false,
       hideSpam = false,
-      wotOnly = false,
+      trustScoreThreshold,
       areAlgoRelays = false,
       showRelayCloseReason = false,
       pinnedEventIds,
@@ -140,10 +147,38 @@ const NoteList = forwardRef<
     const scope = useAccountScopeOptional()
     const authPubkey = scope?.signingIdentity ?? undefined
     const { startLogin } = useNostr()
-    const { isSpammer, isUserTrusted } = useUserTrust()
+    const { isUserTrusted, minTrustScore } = useUserTrust()
     const { mutePubkeySet, muteEventIdSet } = useMuteList()
     const { hideContentMentioningMutedUsers, mutedWords } = useContentPolicy()
     const { isEventDeleted } = useDeletedEvent()
+
+    // Effective threshold: the column's override when set, else the global
+    // default from Settings. 0 = off.
+    const trustThreshold = trustScoreThreshold ?? minTrustScore
+
+    // One Relatr rank lookup per non-WoT author feeds both rank filters:
+    // hideSpam drops authors under SPAM_RANK_THRESHOLD, the trust-score
+    // filter drops authors under `trustThreshold`. WoT members / the owner
+    // pass unconditionally; definitively-unranked authors count as rank 0
+    // (dropped by any threshold > 0, matching upstream Jumble); lookup
+    // failures fail open.
+    const keepByTrust = useCallback(
+      async (candidateEvents: Event[]) => {
+        if (!hideSpam && trustThreshold <= 0) return candidateEvents.map(() => true)
+        return Promise.all(
+          candidateEvents.map(async (evt) => {
+            if (isUserTrusted(evt.pubkey)) return true
+            const rank = await relatrTrust.getFilterRank(evt.pubkey)
+            if (rank === undefined) return true // lookup failed → fail open
+            const r = rank ?? 0 // definitively unranked → bottom of the scale
+            if (hideSpam && r < SPAM_RANK_THRESHOLD) return false
+            if (trustThreshold > 0 && r < trustThreshold) return false
+            return true
+          })
+        )
+      },
+      [hideSpam, trustThreshold, isUserTrusted]
+    )
     const [storedEvents, setStoredEvents] = useState<Event[]>([])
     const [events, setEvents] = useState<Event[]>([])
     const [newEvents, setNewEvents] = useState<Event[]>([])
@@ -211,7 +246,6 @@ const NoteList = forwardRef<
         ) {
           return true
         }
-        if (wotOnly && !isUserTrusted(evt.pubkey)) return true
         if (filterFn && !filterFn(evt)) {
           return true
         }
@@ -226,16 +260,7 @@ const NoteList = forwardRef<
 
         return false
       },
-      [
-        mutePubkeySet,
-        muteEventIdSet,
-        isEventDeleted,
-        filterFn,
-        mutedWords,
-        pinnedEventHexIdSet,
-        wotOnly,
-        isUserTrusted
-      ]
+      [mutePubkeySet, muteEventIdSet, isEventDeleted, filterFn, mutedWords, pinnedEventHexIdSet]
     )
 
     useEffect(() => {
@@ -245,18 +270,13 @@ const NoteList = forwardRef<
           shouldHideEvent
         })
 
-        if (!hideSpam) {
-          setFilteredNotes(rows)
-          return
-        }
-
-        const spamFlags = await Promise.all(rows.map(({ event }) => isSpammer(event.pubkey)))
-        setFilteredNotes(rows.filter((_, i) => !spamFlags[i]))
+        const keep = await keepByTrust(rows.map(({ event }) => event))
+        setFilteredNotes(rows.filter((_, i) => keep[i]))
       }
 
       setFiltering(true)
       processEvents().finally(() => setFiltering(false))
-    }, [events, storedEvents, shouldHideEvent, hideReplies, hideSpam, isSpammer])
+    }, [events, storedEvents, shouldHideEvent, hideReplies, keepByTrust])
 
     useEffect(() => {
       onFilteredCountChange?.(filteredNotes.length)
@@ -283,9 +303,9 @@ const NoteList = forwardRef<
           shouldHideEvent
         }).filter(({ key }) => !currentKeys.has(key))
 
-        if (hideSpam && rows.length > 0) {
-          const spamFlags = await Promise.all(rows.map(({ event }) => isSpammer(event.pubkey)))
-          rows = rows.filter((_, i) => !spamFlags[i])
+        if (rows.length > 0) {
+          const keep = await keepByTrust(rows.map(({ event }) => event))
+          rows = rows.filter((_, i) => keep[i])
         }
 
         if (rows.length === 0) {
@@ -297,7 +317,7 @@ const NoteList = forwardRef<
         setPendingNewRows(rows)
       }
       processNewEvents()
-    }, [newEvents, events, storedEvents, shouldHideEvent, hideReplies, hideSpam, isSpammer])
+    }, [newEvents, events, storedEvents, shouldHideEvent, hideReplies, keepByTrust])
 
     const scrollToTop = (behavior: ScrollBehavior = 'instant') => {
       setTimeout(() => {
@@ -626,7 +646,10 @@ const NoteList = forwardRef<
           </PullToRefresh>
           <div className="h-20" />
           {pendingNewRows.length > 0 && (
-            <NewNotesButton newEvents={pendingNewRows.map(({ event }) => event)} onClick={showNewEvents} />
+            <NewNotesButton
+              newEvents={pendingNewRows.map(({ event }) => event)}
+              onClick={showNewEvents}
+            />
           )}
         </div>
       </NewlyArrivedContext.Provider>

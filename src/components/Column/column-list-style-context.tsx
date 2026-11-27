@@ -37,17 +37,21 @@ export const LIST_STYLE_COLUMN_TYPES = new Set<TColumnType>([
 ])
 
 /**
- * Column types that expose the per-column "WoT only" toggle in their
- * ColumnHeader menu. When on, the column hides notes from authors outside
- * the user's 2-hop WoT (your follows + their follows).
+ * Column types that expose the trust-score filter (shield badge) in their
+ * ColumnHeader. The badge sets a per-column threshold (config
+ * `.trustScoreThreshold`, falling back to the global default from Settings)
+ * that hides notes from authors in the bottom N% of Relatr trust rank —
+ * WoT members always pass, unranked authors count as rank 0, 100 = WoT-only.
  *
- * Limited to feed columns where the toggle meaningfully narrows the result
- * set: hashtag / search / relay / articles. Home is excluded because its
- * `authors` filter is already a subset of WoT (your direct follows), so the
- * toggle would be a no-op. Notifications uses a different filter pipeline
- * (useNotificationFilter) and isn't wired here; deferred follow-up.
+ * Home's Notes tab is all follows (already WoT), but its Notes-and-replies
+ * tab pulls in replies from strangers, which is exactly what the threshold
+ * narrows. Notifications filters through useNotificationFilter's pipeline,
+ * which applies the same threshold per event (the spam-reply wave lands
+ * there first, so it's in).
  */
-export const WOT_TOGGLE_COLUMN_TYPES = new Set<TColumnType>([
+export const TRUST_FILTER_COLUMN_TYPES = new Set<TColumnType>([
+  'home',
+  'notifications',
   'hashtag',
   'search',
   'relay',

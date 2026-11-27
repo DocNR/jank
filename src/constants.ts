@@ -52,6 +52,8 @@ export const StorageKey = {
   SEARCH_HISTORY: 'searchHistory',
   HIDE_INDIRECT_NOTIFICATIONS: 'hideIndirectNotifications',
   DISABLE_NOTIFICATION_SYNC: 'disableNotificationSync',
+  TRUST_SCORE_THRESHOLD: 'trustScoreThreshold',
+  TRUST_SCORE_THRESHOLD_MAP: 'trustScoreThresholdMap',
   COLUMNS: 'columns',
   DECKS: 'decks',
   ACTIVE_DECK_ID: 'activeDeckId',
@@ -154,6 +156,22 @@ export const DEFAULT_FEED_TABS: TFeedTabConfig[] = [
   { id: 'posts', builtin: 'posts', label: 'Notes', hideReplies: true },
   { id: 'postsAndReplies', builtin: 'postsAndReplies', label: 'Notes and replies' }
 ]
+
+/** Ids addressing a trust-score filter threshold. 'default' is the global
+ *  default every context falls back to; the other ids are per-context
+ *  overrides for views that aren't a deck column (their overrides live in the
+ *  local-storage threshold map). Per-column feed thresholds live in
+ *  `column.config.trustScoreThreshold` instead. */
+export const TRUST_SCORE_FILTER_ID = {
+  DEFAULT: 'default',
+  THREAD_REPLIES: 'thread-replies'
+} as const
+
+/** Authors below this Relatr rank (percentile) count as spam in feeds and
+ *  relay reviews. Accounts with no Relatr rank count as rank 0, so they fall
+ *  under this too (matching upstream Jumble, where an unknown percentile
+ *  reads as 0). */
+export const SPAM_RANK_THRESHOLD = 60
 
 // Events dated further than this into the future (skewed author clock, abuse)
 // are hidden from feeds until the wall clock catches up — mirrors the common

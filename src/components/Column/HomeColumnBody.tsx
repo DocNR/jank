@@ -36,6 +36,7 @@ export default function HomeColumnBody({ column }: { column: TColumn }) {
       pubkey={viewContext}
       initialTabId={column.config?.feedTab}
       onTabChange={handleTabChange}
+      trustScoreThreshold={column.config?.trustScoreThreshold}
     />
   )
 }

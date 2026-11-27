@@ -3,14 +3,16 @@ import EmojiPickerDialog from '@/components/EmojiPickerDialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
-import { MEDIA_AUTO_LOAD_POLICY, NSFW_DISPLAY_POLICY } from '@/constants'
+import { MEDIA_AUTO_LOAD_POLICY, NSFW_DISPLAY_POLICY, TRUST_SCORE_FILTER_ID } from '@/constants'
 import { LocalizedLanguageNames, setLanguage as setI18nLanguage, TLanguage } from '@/i18n'
 import SecondaryPageLayout from '@/layouts/SecondaryPageLayout'
 import { isSupportCheckConnectionType } from '@/lib/utils'
 import localStorage from '@/services/local-storage.service'
 import { useContentPolicy } from '@/providers/ContentPolicyProvider'
 import { useUserPreferences } from '@/providers/UserPreferencesProvider'
+import { useUserTrust } from '@/providers/UserTrustProvider'
 import { TMediaAutoLoadPolicy, TNsfwDisplayPolicy } from '@/types'
 import { SelectValue } from '@radix-ui/react-select'
 import { RotateCcw } from 'lucide-react'
@@ -36,6 +38,7 @@ const GeneralSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
   } = useContentPolicy()
   const { quickReaction, updateQuickReaction, quickReactionEmoji, updateQuickReactionEmoji } =
     useUserPreferences()
+  const { minTrustScore, updateMinTrustScore } = useUserTrust()
   const [disableNotificationSync, setDisableNotificationSync] = useState(
     localStorage.getDisableNotificationSync()
   )
@@ -115,6 +118,27 @@ const GeneralSettingsPage = forwardRef(({ index }: { index?: number }, ref) => {
             checked={hideContentMentioningMutedUsers}
             onCheckedChange={setHideContentMentioningMutedUsers}
           />
+        </SettingItem>
+        <SettingItem className="h-auto flex-col items-stretch gap-2 py-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="min-trust-score" className="text-base font-normal">
+              {t('Default trust score filter threshold ({{n}}%)', { n: minTrustScore })}
+            </Label>
+            <span className="text-muted-foreground text-sm">
+              {minTrustScore === 0 ? t('trust-filter.off') : `${minTrustScore}%`}
+            </span>
+          </div>
+          <Slider
+            id="min-trust-score"
+            value={[minTrustScore]}
+            onValueChange={([value]) => updateMinTrustScore(TRUST_SCORE_FILTER_ID.DEFAULT, value)}
+            min={0}
+            max={100}
+            step={5}
+          />
+          <p className="text-muted-foreground text-xs">
+            {t('trust-filter.trust-score-description')}
+          </p>
         </SettingItem>
         <SettingItem>
           <Label htmlFor="disable-notification-sync" className="text-base font-normal">

@@ -204,7 +204,7 @@ export default function SearchColumnBody({ column }: { column: TColumn }) {
           <NoteList
             subRequests={subRequests}
             showKinds={SEARCH_KINDS}
-            wotOnly={!!column.config?.wotOnly}
+            trustScoreThreshold={column.config?.trustScoreThreshold}
           />
         </>
       )}

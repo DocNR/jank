@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { kinds } from 'nostr-tools'
-import { ARTICLES_KINDS, buildArticlesSubRequests, resolveWotOnly } from './ArticlesColumnBody'
+import { ARTICLES_KINDS, buildArticlesSubRequests } from './ArticlesColumnBody'
 
 describe('ARTICLES_KINDS', () => {
   it('is [kinds.LongFormArticle] (30023)', () => {
@@ -25,20 +25,5 @@ describe('buildArticlesSubRequests', () => {
     const urls = ['wss://a.example.com', 'wss://b.example.com']
     const reqs = buildArticlesSubRequests(urls)
     expect(reqs[0].urls).toEqual(urls)
-  })
-})
-
-describe('resolveWotOnly', () => {
-  it('returns false when config is undefined', () => {
-    expect(resolveWotOnly(undefined)).toBe(false)
-  })
-
-  it('returns false when config.wotOnly is falsy', () => {
-    expect(resolveWotOnly({})).toBe(false)
-    expect(resolveWotOnly({ wotOnly: false })).toBe(false)
-  })
-
-  it('returns true when config.wotOnly is true', () => {
-    expect(resolveWotOnly({ wotOnly: true })).toBe(true)
   })
 })
