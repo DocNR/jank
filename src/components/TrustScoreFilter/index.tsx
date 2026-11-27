@@ -30,7 +30,8 @@ function getDescription(score: number, t: (key: string, options?: any) => string
  * Shield badge + popover controlling one trust-score filter threshold
  * (0-100 percentile). Off (0) shows everyone; WoT (100) shows only the 2-hop
  * Web of Trust; in between hides authors whose Relatr rank falls in the
- * bottom `score`% (unranked authors pass). Matches upstream Jumble's
+ * bottom `score`% (accounts with no Relatr rank count as rank 0, so a
+ * threshold on hides fresh throwaway spam). Matches upstream Jumble's
  * TrustScoreFilter behavior.
  *
  * Stateless by design: the caller owns the value — deck columns pass their

@@ -167,6 +167,12 @@ export const TRUST_SCORE_FILTER_ID = {
   THREAD_REPLIES: 'thread-replies'
 } as const
 
+/** Authors below this Relatr rank (percentile) count as spam in feeds and
+ *  relay reviews. Accounts with no Relatr rank count as rank 0, so they fall
+ *  under this too (matching upstream Jumble, where an unknown percentile
+ *  reads as 0). */
+export const SPAM_RANK_THRESHOLD = 60
+
 // Events dated further than this into the future (skewed author clock, abuse)
 // are hidden from feeds until the wall clock catches up — mirrors the common
 // relay convention of rejecting events "too far off from the current time".

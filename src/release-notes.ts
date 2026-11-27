@@ -19,6 +19,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     date: '2026-11-27',
     highlights: [
       'New trust-score filter, matching Jumble: a shield badge on Home, hashtag, search, relay and articles columns (and on the replies section of every note) opens a slider — filter out the bottom N% of users by Relatr trust rank, with quick presets Off / Low / Medium / High / WoT. WoT members always pass; 100 shows only your Web of Trust (this replaces the old on/off WoT shield toggle, which migrates automatically).',
+      'Accounts Relatr has never ranked (fresh throwaway spam) count as rank 0, so any threshold — even Low — hides them. Toggle Off to see everything again.',
       'A default threshold for everything the per-view badge has not overridden now lives in Settings → General.'
     ]
   },

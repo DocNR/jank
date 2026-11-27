@@ -19,6 +19,7 @@ import timelineCache from '@/services/caches/timeline-cache.service'
 import client from '@/services/client.service'
 import relatrTrust from '@/services/relatr-trust.service'
 import threadService from '@/services/thread.service'
+import { SPAM_RANK_THRESHOLD } from '@/constants'
 import { TFeedSubRequest, TNotificationStyle } from '@/types'
 import dayjs from 'dayjs'
 import { Event } from 'nostr-tools'
@@ -44,10 +45,6 @@ import CompactNoteRow from './CompactNoteRow'
 
 const LIMIT = 200
 const ALGO_LIMIT = 500
-
-// Authors below this Relatr rank (percentile) count as spam when hideSpam is
-// set. Mirrors UserTrustProvider.isSpammer.
-const SPAM_RANK_THRESHOLD = 60
 
 // Stored (IndexedDB-replayed) events merge into the live timeline only while
 // they still overlap or extend it; a stale stored snapshot older than the
@@ -82,8 +79,10 @@ const NoteList = forwardRef<
     /** Trust-score filter threshold override for this feed (0-100).
      *  Undefined falls back to the global default from Settings
      *  (useUserTrust). Hides notes whose author's Relatr rank is in the
-     *  bottom N% — the owner, WoT members, and unranked authors always
-     *  pass. Driven by the shield badge in the column header
+     *  bottom N% — the owner and WoT members always pass, authors with no
+     *  Relatr rank count as rank 0 (hidden whenever a threshold is on,
+     *  matching upstream Jumble), and lookup failures fail open. Driven by
+     *  the shield badge in the column header
      *  (`config.trustScoreThreshold`). */
     trustScoreThreshold?: number
     areAlgoRelays?: boolean
@@ -160,16 +159,20 @@ const NoteList = forwardRef<
     // One Relatr rank lookup per non-WoT author feeds both rank filters:
     // hideSpam drops authors under SPAM_RANK_THRESHOLD, the trust-score
     // filter drops authors under `trustThreshold`. WoT members / the owner
-    // pass unconditionally; unranked authors fail open (pass).
+    // pass unconditionally; definitively-unranked authors count as rank 0
+    // (dropped by any threshold > 0, matching upstream Jumble); lookup
+    // failures fail open.
     const keepByTrust = useCallback(
       async (candidateEvents: Event[]) => {
         if (!hideSpam && trustThreshold <= 0) return candidateEvents.map(() => true)
         return Promise.all(
           candidateEvents.map(async (evt) => {
             if (isUserTrusted(evt.pubkey)) return true
-            const rank = await relatrTrust.getRank(evt.pubkey)
-            if (hideSpam && rank !== null && rank < SPAM_RANK_THRESHOLD) return false
-            if (trustThreshold > 0 && rank !== null && rank < trustThreshold) return false
+            const rank = await relatrTrust.getFilterRank(evt.pubkey)
+            if (rank === undefined) return true // lookup failed → fail open
+            const r = rank ?? 0 // definitively unranked → bottom of the scale
+            if (hideSpam && r < SPAM_RANK_THRESHOLD) return false
+            if (trustThreshold > 0 && r < trustThreshold) return false
             return true
           })
         )

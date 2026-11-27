@@ -4,16 +4,20 @@ import { meetsTrustScore } from './trust-score'
 describe('meetsTrustScore', () => {
   const owner = 'owner-pubkey'
   const trusted = new Set(['wot-pubkey'])
+  // Three-state rank resolution (see IRelatrTrustService.getFilterRank):
+  // number = rank, null = definitively unranked, undefined = lookup failed.
   const loadRank = async (pubkey: string) =>
     ({
       ranked: 42,
       high: 95,
-      unranked: null
-    })[pubkey] ?? null
+      unranked: null,
+      failed: undefined
+    })[pubkey]
 
   it('passes everyone when the filter is off', async () => {
     expect(await meetsTrustScore('ranked', owner, 0, trusted, loadRank)).toBe(true)
     expect(await meetsTrustScore('unranked', owner, 0, trusted, loadRank)).toBe(true)
+    expect(await meetsTrustScore('failed', owner, 0, trusted, loadRank)).toBe(true)
   })
 
   it('always passes the owner and WoT members, at any threshold', async () => {
@@ -31,7 +35,14 @@ describe('meetsTrustScore', () => {
     expect(await meetsTrustScore('high', owner, 100, trusted, loadRank)).toBe(false)
   })
 
-  it('fails open for unranked authors', async () => {
-    expect(await meetsTrustScore('unranked', owner, 50, trusted, loadRank)).toBe(true)
+  it('counts a definitively unranked author as rank 0 — fails every threshold > 0', async () => {
+    expect(await meetsTrustScore('unranked', owner, 5, trusted, loadRank)).toBe(false)
+    expect(await meetsTrustScore('unranked', owner, 50, trusted, loadRank)).toBe(false)
+    expect(await meetsTrustScore('unranked', owner, 100, trusted, loadRank)).toBe(false)
+  })
+
+  it('fails open when the rank lookup failed (undefined)', async () => {
+    expect(await meetsTrustScore('failed', owner, 50, trusted, loadRank)).toBe(true)
+    expect(await meetsTrustScore('failed', owner, 100, trusted, loadRank)).toBe(true)
   })
 })

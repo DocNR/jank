@@ -1,4 +1,4 @@
-import { TRUST_SCORE_FILTER_ID } from '@/constants'
+import { SPAM_RANK_THRESHOLD, TRUST_SCORE_FILTER_ID } from '@/constants'
 import { meetsTrustScore } from '@/lib/trust-score'
 import followListService from '@/services/fetchers/follow-list.service'
 import relatrTrust from '@/services/relatr-trust.service'
@@ -73,9 +73,9 @@ export function UserTrustProvider({ children }: { children: React.ReactNode }) {
   const isSpammer = useCallback(
     async (pubkey: string) => {
       if (isUserTrusted(pubkey)) return false
-      const rank = await relatrTrust.getRank(pubkey)
-      if (rank === null) return false
-      return rank < 60
+      const rank = await relatrTrust.getFilterRank(pubkey)
+      if (rank === undefined) return false // lookup failed → fail open
+      return (rank ?? 0) < SPAM_RANK_THRESHOLD
     },
     [isUserTrusted]
   )

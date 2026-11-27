@@ -200,17 +200,92 @@ describe('relatrTrust.getRank', () => {
     expect(clientService.subscribe).not.toHaveBeenCalled()
   })
 
-  it('timeout closes sub + returns null when no EOSE arrives', async () => {
+  it('timeout closes sub + rejects (so getFilterRank fails open) when no EOSE arrives', async () => {
     vi.useFakeTimers()
-    const closeSpy = vi.fn()
-    ;(clientService.subscribe as any).mockImplementation(() => ({ close: closeSpy }))
-    const promise = relatrTrust.getRank(PUBKEY_A)
-    await Promise.resolve()
-    await vi.advanceTimersByTimeAsync(150)
-    await vi.advanceTimersByTimeAsync(6_000)
-    expect(await promise).toBe(null)
-    expect(closeSpy).toHaveBeenCalled()
-    vi.useRealTimers()
+    try {
+      const closeSpy = vi.fn()
+      ;(clientService.subscribe as any).mockImplementation(() => ({ close: closeSpy }))
+      // Pre-attach the catch so the rejection is handled the moment it fires
+      // (a later `rejects.toThrow` would trip Node's unhandled-rejection check).
+      const promise = relatrTrust.getRank(PUBKEY_A).catch((e: Error) => e)
+      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(150)
+      await vi.advanceTimersByTimeAsync(6_000)
+      const err = (await promise) as Error
+      expect(err.message).toMatch(/timed out without EOSE/)
+      expect(closeSpy).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('relatrTrust.getFilterRank', () => {
+  beforeEach(() => {
+    relatrTrust._resetForTests()
+    ;(relayListService.fetchRelayList as any).mockResolvedValue({
+      read: ['wss://relay.example.com'],
+      write: []
+    })
+    ;(indexedDb.getRelatrTrust as any).mockResolvedValue(null)
+    ;(indexedDb.iterateRelatrTrust as any).mockImplementation(async () => {})
+    ;(indexedDb.putRelatrTrust as any).mockResolvedValue(undefined)
+  })
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('resolves a hit from the rank tag as a number', async () => {
+    ;(clientService.subscribe as any).mockImplementation((_urls: any, _filter: any, opts: any) => {
+      setTimeout(() => {
+        opts.onevent({ tags: [['d', PUBKEY_A], ['rank', '73']] })
+        opts.oneose()
+      }, 0)
+      return { close: vi.fn() }
+    })
+    expect(await relatrTrust.getFilterRank(PUBKEY_A)).toBe(73)
+  })
+
+  it('returns null (definitively unranked) after EOSE with no event', async () => {
+    ;(clientService.subscribe as any).mockImplementation((_urls: any, _filter: any, opts: any) => {
+      setTimeout(() => opts.oneose(), 0)
+      return { close: vi.fn() }
+    })
+    expect(await relatrTrust.getFilterRank(PUBKEY_A)).toBe(null)
+  })
+
+  it('returns undefined when the batch times out without EOSE (fail open)', async () => {
+    vi.useFakeTimers()
+    try {
+      ;(clientService.subscribe as any).mockImplementation(() => ({ close: vi.fn() }))
+      const promise = relatrTrust.getFilterRank(PUBKEY_A)
+      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(150)
+      await vi.advanceTimersByTimeAsync(6_000)
+      expect(await promise).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('returns undefined when the relay list cannot be resolved (fail open)', async () => {
+    ;(relayListService.fetchRelayList as any).mockRejectedValue(new Error('no relays'))
+    ;(clientService.subscribe as any).mockImplementation(() => ({ close: vi.fn() }))
+    expect(await relatrTrust.getFilterRank(PUBKEY_A)).toBeUndefined()
+    // The hard-failure latch means later calls fail open without a sub.
+    expect(await relatrTrust.getFilterRank(PUBKEY_B)).toBeUndefined()
+    expect(clientService.subscribe).not.toHaveBeenCalled()
+  })
+
+  it('serves a definitive negative cache entry as null without the network', async () => {
+    ;(clientService.subscribe as any).mockImplementation((_urls: any, _filter: any, opts: any) => {
+      setTimeout(() => opts.oneose(), 0)
+      return { close: vi.fn() }
+    })
+    await relatrTrust.getFilterRank(PUBKEY_A) // caches the negative entry
+    ;(clientService.subscribe as any).mockClear()
+    expect(await relatrTrust.getFilterRank(PUBKEY_A)).toBe(null)
+    expect(clientService.subscribe).not.toHaveBeenCalled()
   })
 })
 
