@@ -35,7 +35,7 @@ export default function RelayColumnBody({ column }: { column: TColumn }) {
       subRequests={subRequests}
       showKinds={RELAY_KINDS}
       areAlgoRelays={false}
-      wotOnly={!!column.config?.wotOnly}
+      trustScoreThreshold={column.config?.trustScoreThreshold}
     />
   )
 }

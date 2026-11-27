@@ -15,6 +15,14 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '26.17.0',
+    date: '2026-11-27',
+    highlights: [
+      'New trust-score filter, matching Jumble: a shield badge on Home, hashtag, search, relay and articles columns (and on the replies section of every note) opens a slider — filter out the bottom N% of users by Relatr trust rank, with quick presets Off / Low / Medium / High / WoT. WoT members always pass; 100 shows only your Web of Trust (this replaces the old on/off WoT shield toggle, which migrates automatically).',
+      'A default threshold for everything the per-view badge has not overridden now lives in Settings → General.'
+    ]
+  },
+  {
     version: '26.16.0',
     date: '2026-09-26',
     highlights: [

@@ -1,11 +1,22 @@
+import { TRUST_SCORE_FILTER_ID } from '@/constants'
+import { meetsTrustScore } from '@/lib/trust-score'
 import followListService from '@/services/fetchers/follow-list.service'
 import relatrTrust from '@/services/relatr-trust.service'
-import { createContext, useCallback, useContext, useEffect } from 'react'
+import storage from '@/services/local-storage.service'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { useNostr } from './NostrProvider'
 
 type TUserTrustContext = {
   isUserTrusted: (pubkey: string) => boolean
   isSpammer: (pubkey: string) => Promise<boolean>
+  /** Global default trust-score filter threshold (0 = off). */
+  minTrustScore: number
+  /** Per-context overrides for non-column views (thread replies), keyed by
+   *  TRUST_SCORE_FILTER_ID. Column feed thresholds live in column.config. */
+  minTrustScoreMap: Record<string, number>
+  getMinTrustScore: (id: string) => number
+  updateMinTrustScore: (id: string, score: number) => void
+  meetsMinTrustScore: (pubkey: string, minScore: number) => Promise<boolean>
 }
 
 const UserTrustContext = createContext<TUserTrustContext | undefined>(undefined)
@@ -22,6 +33,10 @@ const wotSet = new Set<string>()
 
 export function UserTrustProvider({ children }: { children: React.ReactNode }) {
   const { pubkey: currentPubkey } = useNostr()
+  const [minTrustScore, setMinTrustScore] = useState(() => storage.getMinTrustScore())
+  const [minTrustScoreMap, setMinTrustScoreMap] = useState<Record<string, number>>(() =>
+    storage.getMinTrustScoreMap()
+  )
 
   useEffect(() => {
     if (!currentPubkey) return
@@ -65,8 +80,49 @@ export function UserTrustProvider({ children }: { children: React.ReactNode }) {
     [isUserTrusted]
   )
 
+  const getMinTrustScore = useCallback(
+    (id: string) => {
+      return id === TRUST_SCORE_FILTER_ID.DEFAULT
+        ? minTrustScore
+        : (minTrustScoreMap[id] ?? minTrustScore)
+    },
+    [minTrustScore, minTrustScoreMap]
+  )
+
+  const updateMinTrustScore = (id: string, score: number) => {
+    if (score < 0 || score > 100) return
+
+    if (id === TRUST_SCORE_FILTER_ID.DEFAULT) {
+      setMinTrustScore(score)
+      storage.setMinTrustScore(score)
+    } else {
+      const newMap = { ...minTrustScoreMap, [id]: score }
+      setMinTrustScoreMap(newMap)
+      storage.setMinTrustScoreMap(newMap)
+    }
+  }
+
+  const meetsMinTrustScore = useCallback(
+    async (pubkey: string, minScore: number) => {
+      return meetsTrustScore(pubkey, currentPubkey, minScore, wotSet, (key) =>
+        relatrTrust.getRank(key)
+      )
+    },
+    [currentPubkey]
+  )
+
   return (
-    <UserTrustContext.Provider value={{ isUserTrusted, isSpammer }}>
+    <UserTrustContext.Provider
+      value={{
+        isUserTrusted,
+        isSpammer,
+        minTrustScore,
+        minTrustScoreMap,
+        getMinTrustScore,
+        updateMinTrustScore,
+        meetsMinTrustScore
+      }}
+    >
       {children}
     </UserTrustContext.Provider>
   )

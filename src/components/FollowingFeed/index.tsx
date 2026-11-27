@@ -19,12 +19,16 @@ type Props = {
   initialTabId?: string
   /** Called when the user switches feed tab, so the column can persist it. */
   onTabChange?: (tabId: string) => void
+  /** Trust-score filter threshold override (forwarded to <NormalFeed> →
+   *  <NoteList>). Undefined falls back to the global default in NoteList. */
+  trustScoreThreshold?: number
 }
 
 export default function FollowingFeed({
   pubkey: pubkeyProp,
   initialTabId,
-  onTabChange
+  onTabChange,
+  trustScoreThreshold
 }: Props = {}) {
   const { t } = useTranslation()
   const { pubkey: activePubkey } = useNostr()
@@ -103,6 +107,7 @@ export default function FollowingFeed({
       isPubkeyFeed
       initialTabId={initialTabId}
       onTabChange={onTabChange}
+      trustScoreThreshold={trustScoreThreshold}
     />
   )
 }

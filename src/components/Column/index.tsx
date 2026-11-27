@@ -8,9 +8,10 @@ import { MutedThreadRevealProvider } from '@/providers/MutedThreadRevealProvider
 import { useScreenSize } from '@/providers/ScreenSizeProvider'
 import { useUserPreferences } from '@/providers/UserPreferencesProvider'
 import { useNostr } from '@/providers/NostrProvider'
+import { useUserTrust } from '@/providers/UserTrustProvider'
 import { ColumnVisibilityContext } from '@/hooks/useColumnVisible'
 import { NOTIFICATION_LIST_STYLE } from '@/constants'
-import { LIST_STYLE_COLUMN_TYPES, WOT_TOGGLE_COLUMN_TYPES } from './column-list-style-context'
+import { LIST_STYLE_COLUMN_TYPES, TRUST_FILTER_COLUMN_TYPES } from './column-list-style-context'
 import { signingState } from './ColumnHeader/signing-state'
 import { TColumn } from '@/types/column'
 import { activeColumnIdAtom, focusBeamActiveAtom } from '@/atoms/active-column'
@@ -93,10 +94,7 @@ export function Column({ column, dragHandleProps, style }: Props) {
   // of-animation discontinuity — the position change happens beneath
   // the scrim before the user sees the deck again.
   const isFocusedAtom = useMemo(
-    () =>
-      atom(
-        (get) => get(focusBeamActiveAtom) && get(activeColumnIdAtom) === column.id
-      ),
+    () => atom((get) => get(focusBeamActiveAtom) && get(activeColumnIdAtom) === column.id),
     [column.id]
   )
   const isFocused = useAtomValue(isFocusedAtom)
@@ -187,10 +185,19 @@ export function Column({ column, dragHandleProps, style }: Props) {
     updateColumnConfig(column.id, { listStyle: next })
   }, [column.id, effectiveListStyle, updateColumnConfig])
 
-  const wotOnly = !!column.config?.wotOnly
-  const onToggleWotOnly = useCallback(() => {
-    updateColumnConfig(column.id, { wotOnly: !wotOnly })
-  }, [column.id, wotOnly, updateColumnConfig])
+  // Effective trust-score threshold for the header badge: the per-column
+  // override when set, else the global default from Settings. The bodies
+  // resolve the same way inside NoteList (which falls back via context), so
+  // badge display and actual filtering always agree. Callback identity only
+  // changes with column id, keeping the memoized header cheap.
+  const { minTrustScore } = useUserTrust()
+  const trustScoreThreshold = column.config?.trustScoreThreshold ?? minTrustScore
+  const onTrustScoreThresholdChange = useCallback(
+    (score: number) => {
+      updateColumnConfig(column.id, { trustScoreThreshold: score })
+    },
+    [column.id, updateColumnConfig]
+  )
 
   // Account color: single source of truth for the column subtree. The stripe
   // hue is keyed on `viewContext` — "whose perspective is this column" — so it
@@ -314,9 +321,11 @@ export function Column({ column, dragHandleProps, style }: Props) {
           onToggleListStyle={
             LIST_STYLE_COLUMN_TYPES.has(column.type) ? onToggleListStyle : undefined
           }
-          wotOnly={WOT_TOGGLE_COLUMN_TYPES.has(column.type) ? wotOnly : undefined}
-          onToggleWotOnly={
-            WOT_TOGGLE_COLUMN_TYPES.has(column.type) ? onToggleWotOnly : undefined
+          trustScoreThreshold={
+            TRUST_FILTER_COLUMN_TYPES.has(column.type) ? trustScoreThreshold : undefined
+          }
+          onTrustScoreThresholdChange={
+            TRUST_FILTER_COLUMN_TYPES.has(column.type) ? onTrustScoreThresholdChange : undefined
           }
         />
         <div

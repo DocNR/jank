@@ -314,7 +314,7 @@ const ARTICLES_DESCRIPTOR: ColumnTypeDescriptor = {
     viewContext: account?.pubkey,
     signingIdentity: account?.pubkey ?? null,
     type: 'articles',
-    config: { wotOnly: false }
+    config: {}
   }),
   isReadyToPreview: (draft) => !!draft.viewContext,
   // No supportsViewAs: an articles feed is global (no authors/#p in

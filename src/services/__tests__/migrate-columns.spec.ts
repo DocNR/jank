@@ -100,7 +100,7 @@ describe('migrateColumns', () => {
           type: 'articles',
           viewContext: 'pubkey-hex',
           signingIdentity: 'pubkey-hex',
-          config: { wotOnly: false }
+          config: { trustScoreThreshold: 100 }
         }
       ]
       const result = migrateColumns(raw)
@@ -108,8 +108,30 @@ describe('migrateColumns', () => {
       expect(result[0]).toMatchObject({
         id: 'col-articles-1',
         type: 'articles',
-        config: { wotOnly: false }
+        config: { trustScoreThreshold: 100 }
       })
+    })
+
+    it('migrates the legacy wotOnly bool to a trust-score threshold', () => {
+      const raw = [
+        {
+          id: 'col-articles-2',
+          type: 'articles',
+          viewContext: 'pubkey-hex',
+          signingIdentity: 'pubkey-hex',
+          config: { wotOnly: true }
+        },
+        {
+          id: 'col-articles-3',
+          type: 'articles',
+          viewContext: 'pubkey-hex',
+          signingIdentity: 'pubkey-hex',
+          config: { wotOnly: false }
+        }
+      ]
+      const result = migrateColumns(raw)
+      expect(result[0].config).toEqual({ trustScoreThreshold: 100 })
+      expect(result[1].config).toEqual({})
     })
   })
 

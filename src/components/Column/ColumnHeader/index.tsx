@@ -15,6 +15,7 @@ import { HTMLAttributes, MouseEvent as ReactMouseEvent, memo, useState } from 'r
 import { useTranslation } from 'react-i18next'
 import ColumnHeaderMenu from './ColumnHeaderMenu'
 import SigningIndicator from './SigningIndicator'
+import TrustScoreFilter from '@/components/TrustScoreFilter'
 import { signingState } from './signing-state'
 
 /**
@@ -25,7 +26,8 @@ import { signingState } from './signing-state'
  *   row 2 is the full-width "Acting as" signing indicator so it can never be
  *   squeezed or clipped.
  *
- * Compose + the list-style toggle live in the ⋯ ColumnHeaderMenu.
+ * Compose + the list-style toggle live in the ⋯ ColumnHeaderMenu; the
+ * trust-score filter badge (shield) sits beside the menu on feed columns.
  */
 const ColumnHeader = memo(function ColumnHeader({
   column,
@@ -35,8 +37,8 @@ const ColumnHeader = memo(function ColumnHeader({
   isFocused,
   effectiveListStyle,
   onToggleListStyle,
-  wotOnly,
-  onToggleWotOnly
+  trustScoreThreshold,
+  onTrustScoreThresholdChange
 }: {
   column: TColumn
   onRemove: (id: string) => void
@@ -52,11 +54,11 @@ const ColumnHeader = memo(function ColumnHeader({
    * Both undefined for column types without the toggle. */
   effectiveListStyle?: 'compact' | 'detailed'
   onToggleListStyle?: () => void
-  /** WoT-toggle columns only (see WOT_TOGGLE_COLUMN_TYPES): current
-   *  `config.wotOnly` value + the toggle handler. Both undefined for column
-   *  types without the toggle. */
-  wotOnly?: boolean
-  onToggleWotOnly?: () => void
+  /** Trust-filter columns only (see TRUST_FILTER_COLUMN_TYPES): the
+   *  effective threshold (per-column override ?? global default) + its
+   *  change handler. Both undefined for column types without the badge. */
+  trustScoreThreshold?: number
+  onTrustScoreThresholdChange?: (score: number) => void
 }) {
   const { t } = useTranslation()
   const { density } = useUserPreferences()
@@ -87,10 +89,11 @@ const ColumnHeader = memo(function ColumnHeader({
   // Compose is hidden on view-only columns (no signer to compose with).
   const showCompose = column.signingIdentity !== null
   const showListStyleToggle = !!effectiveListStyle && !!onToggleListStyle
-  const showWotToggle = !!onToggleWotOnly
+  const showTrustFilter = !!onTrustScoreThresholdChange
   // Don't render the ⋯ trigger when the menu would be empty (a view-only,
-  // non-list-style column — e.g. a foreign-pubkey Home column).
-  const showMenu = showCompose || showListStyleToggle || showWotToggle
+  // non-list-style column — e.g. a foreign-pubkey Home column). The
+  // trust-filter badge is standalone, not a menu item.
+  const showMenu = showCompose || showListStyleToggle
 
   // Plain title-bar click scrolls the column to top. Ignore clicks that
   // originate on an interactive control (pin / menu / X) or on the
@@ -116,7 +119,7 @@ const ColumnHeader = memo(function ColumnHeader({
         <div className="flex min-w-0 items-center gap-2">
           <UserAvatar userId={column.viewContext} size="small" />
           <div className="flex min-w-0 items-baseline gap-1.5">
-            <span className="text-title min-w-0 line-clamp-2 leading-tight font-medium">
+            <span className="text-title line-clamp-2 min-w-0 leading-tight font-medium">
               {columnLabel(column, t)}
             </span>
             {showHandle && (
@@ -139,16 +142,18 @@ const ColumnHeader = memo(function ColumnHeader({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {showTrustFilter && (
+            <TrustScoreFilter
+              value={trustScoreThreshold ?? 0}
+              onChange={onTrustScoreThresholdChange}
+            />
+          )}
           {showMenu && (
             <ColumnHeaderMenu
               showCompose={showCompose}
-              onCompose={
-                showCompose ? () => checkLogin(() => setComposeOpen(true)) : () => {}
-              }
+              onCompose={showCompose ? () => checkLogin(() => setComposeOpen(true)) : () => {}}
               effectiveListStyle={effectiveListStyle}
               onToggleListStyle={onToggleListStyle}
-              wotOnly={wotOnly}
-              onToggleWotOnly={onToggleWotOnly}
             />
           )}
           <Tooltip>
@@ -164,9 +169,7 @@ const ColumnHeader = memo(function ColumnHeader({
                 <X className="size-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>
-              {isFocused ? t('Exit Focus Beam') : t('Remove column')}
-            </TooltipContent>
+            <TooltipContent>{isFocused ? t('Exit Focus Beam') : t('Remove column')}</TooltipContent>
           </Tooltip>
         </div>
       </div>
@@ -198,7 +201,7 @@ function NotificationCountBadge({ columnId }: { columnId: string }) {
   const count = useAtomValue(notificationUnreadCountAtom)[columnId] ?? 0
   if (count <= 0) return null
   return (
-    <span className="bg-primary text-primary-foreground ms-1 inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none">
+    <span className="bg-primary text-primary-foreground ms-1 inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-1 text-[10px] leading-none font-semibold">
       {count > 99 ? '99+' : count}
     </span>
   )

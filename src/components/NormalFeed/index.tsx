@@ -17,7 +17,8 @@ export default function NormalFeed({
   onRefresh,
   isPubkeyFeed = false,
   initialTabId,
-  onTabChange
+  onTabChange,
+  trustScoreThreshold
 }: {
   feedId: string
   subRequests: TFeedSubRequest[]
@@ -32,6 +33,9 @@ export default function NormalFeed({
   /** Called with the new tab id when the user switches tabs, so the caller can
    *  persist the choice (e.g. into column.config.feedTab). */
   onTabChange?: (tabId: string) => void
+  /** Trust-score filter threshold override, forwarded to <NoteList>.
+   *  Undefined falls back to the global default from Settings. */
+  trustScoreThreshold?: number
 }) {
   const { getShowKinds } = useKindFilter()
   const feedShowKinds = useMemo(() => getShowKinds(feedId), [getShowKinds, feedId])
@@ -122,6 +126,7 @@ export default function NormalFeed({
           areAlgoRelays={areAlgoRelays}
           showRelayCloseReason={showRelayCloseReason}
           isPubkeyFeed={isPubkeyFeed}
+          trustScoreThreshold={trustScoreThreshold}
         />
       ) : null}
     </>
